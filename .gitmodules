@@ -1,0 +1,3 @@
+[submodule "src/ruuveal"]
+	path = src/ruuveal
+	url = ../ruuveal.git
