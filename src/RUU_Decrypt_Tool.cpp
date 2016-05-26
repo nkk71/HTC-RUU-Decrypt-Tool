@@ -64,7 +64,7 @@
 #endif //__CYGWIN__
 
 
-#define VERSION_STRING "3.0.1"
+#define VERSION_STRING "3.0.2"
 
 
 // folders
@@ -90,6 +90,9 @@
 // zip extraction inclusion / exclusion
 #define SYSTEMIMG	"system*.img*"
 #define BOOTIMG		"boot*.img"
+
+// buffer size for keyfile
+#define KEYFILE_SIZE 96
 
 
 // ==================================================================================
@@ -577,6 +580,65 @@ std::string find_file_from_pattern(const char *path, const char *pattern)
 	return path_file;
 }
 // =====================================================================
+
+
+int Check_If_New_Keyfile(const char *path_new_key_file, const char *full_path_keys)
+{
+	int exit_code = 1;
+	int i;
+	int num_of_keys;
+	struct dirent **entry_list;
+
+	FILE * pFile;
+	char buffer_new_key[KEYFILE_SIZE];
+	char buffer_chk_key[KEYFILE_SIZE];
+
+	pFile = fopen(path_new_key_file, "rb" );
+	if (pFile == NULL)
+		exit_code = 3; // coulndt read new keyfile
+	else {
+		if (fread(buffer_new_key, 1, KEYFILE_SIZE, pFile) != KEYFILE_SIZE)
+			exit_code = 4; // couldnt read new keyfile into buffer
+
+		fclose(pFile);
+	}
+
+	std::string path_base = get_absolute_cwd();
+
+	if (!change_dir(full_path_keys))
+		return 2;
+
+
+	if (exit_code == 1) {
+		num_of_keys = scandir(".", &entry_list, select_files_keyfiles, versionsort);
+		if (is_scandir_error(entry_list, num_of_keys)) {
+			exit_code = 5;
+		}
+		else {
+			for (i = 0; i < num_of_keys; i++) {
+				pFile = fopen(entry_list[i]->d_name, "rb" );
+				if (pFile == NULL)
+					exit_code = 6; // couldnt open file
+				else {
+					if (fread(buffer_chk_key, 1, KEYFILE_SIZE, pFile) != KEYFILE_SIZE)
+						exit_code = 7; // couldnt read buffer
+					else if (memcmp(buffer_new_key, buffer_chk_key, KEYFILE_SIZE) == 0)
+							exit_code = 0; // key already exists
+
+				fclose(pFile);
+				}
+
+				if (exit_code != 1)
+					break;
+			}
+			free_dirent_entry_list(entry_list, num_of_keys);
+		}
+	}
+
+	change_dir(path_base);
+
+	return exit_code;
+}
 
 
 /*==============================================================================================================================
@@ -2021,11 +2083,30 @@ int main(int argc, char **argv)
 
 	PRINT_TITLE("Checking keyfile state");
 	if (ruuveal_device.empty()) {
-		// move and rename keyfile
-		std::string path_keyfile_file = info.modelid.substr(0, 4) + "_keyfile_" + info.mainver + ".bin";
 		if (access("tmp/use_keyfile.bin", F_OK) == 0) {
-			PRINT_PROGRESS("Moving keyfile to %s", path_keyfile_file.c_str());
-			move_file("tmp/use_keyfile.bin", path_keyfile_file.c_str());
+			int res;
+
+			res = Check_If_New_Keyfile("tmp/use_keyfile.bin", full_path_to_keys.c_str());
+
+			if (res > 1)
+				PRINT_ERROR("in Check_If_New_Keyfile (res=%i)", res);
+			else if (res == 0) {
+				PRINT_PROGRESS("Keyfile used already matches one in the keyfiles folder.");
+				delete_file("tmp/use_keyfile.bin");
+			}
+			else {
+				// move and rename keyfile
+				std::string path_keyfile_file = info.modelid.substr(0, 4) + "_keyfile_" + info.mainver + ".bin";
+				PRINT_PROGRESS("Moving keyfile to %s", path_keyfile_file.c_str());
+				move_file("tmp/use_keyfile.bin", path_keyfile_file.c_str());
+
+				PRINT_INFO("");
+				PRINT_INFO("INFO: the keyfile '%s' generated appears to be new,", path_keyfile_file.c_str());
+				PRINT_INFO("      please consider sharing/uploading it, so it can be included in future");
+				PRINT_INFO("      releases of this tool, at:");
+				PRINT_INFO("http://forum.xda-developers.com/chef-central/android/tool-universal-htc-ruu-rom-decryption-t3382928");
+				PRINT_INFO("");
+			}
 		}
 		else
 			PRINT_PROGRESS("Unencrypted RUU, no keyfile was needed.");
