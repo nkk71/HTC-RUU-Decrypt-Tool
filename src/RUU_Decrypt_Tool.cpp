@@ -445,6 +445,9 @@ int run_program(const char *bin_to_run, char *argv[])
 
 		// we should not get here unless an error in exec() occurred
 		PRINT_ERROR("something went wrong with exec() (errno=%i '%s')!", errno, strerror(errno));
+
+		raise(SIGINT); // abort program
+
 		exit_code = -2;
 		return exit_code;
 	}
