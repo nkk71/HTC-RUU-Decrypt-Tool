@@ -488,8 +488,16 @@ int run_program(const char *bin_to_run, ...)
 
 
 // =====================================================================
-// scandir stuff
+// scandir stuff   (consider adding: de->d_type == DT_REG)
 // ---------------------------------------------------------------------
+int select_files_any(const struct dirent *de)
+{
+	if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
+		return 0;
+	else
+		return 1;
+}
+
 int select_files_zip(const struct dirent *de)
 {
 	std::string file_name = de->d_name;
@@ -609,10 +617,11 @@ int Test_KeyFile(const char *path_enczip, const char *path_keyfile)
 				else
 					res = system_args("ruuveal --device %s %s %s > /dev/null 2>&1", ruuveal_device.c_str(), path_enczip, "tmpzip.zip");
 #else
+				// /dev/null 2>&1 redirection doesnt work this way in fork
 				if (ruuveal_device.empty())
-					res = run_program("ruuveal", "-K", path_keyfile, path_enczip, "tmpzip.zip", ">/dev/null", "2>&1", NULL);
+					res = run_program("ruuveal", "-K", path_keyfile, path_enczip, "tmpzip.zip", NULL);
 				else
-					res = run_program("ruuveal", "--device", ruuveal_device.c_str(), path_enczip, "tmpzip.zip", ">/dev/null", "2>&1", NULL);
+					res = run_program("ruuveal", "--device", ruuveal_device.c_str(), path_enczip, "tmpzip.zip", NULL);
 #endif
 
 	if (res == 0) {
@@ -742,6 +751,208 @@ int Run_BRUUTVEAL(const char *path_hboot_file, const char *path_encrypted_zip_fi
  *    4  -> ruuveal, copy, unzip, or move failed to create destination files
  * 
  */
+int KeyFinder_CheckInputFile(const char *full_path_encrypted_zip_file, const char *full_path_hboot_file, const char *full_path_output_key_file)
+{
+	// check if keyfile																			> test
+	// check if hboot									-> then bruutveal using hboot			> test
+	// check if hosd 		-> extract downloadzip 		-> then bruutveal using downloadzip		> test
+
+	int exit_code = 1;
+	int res;
+
+	if (file_size(full_path_hboot_file) == 96) {
+		PRINT_PROGRESS("... assuming keyfile, going to test it...");
+
+		if (Test_KeyFile(full_path_encrypted_zip_file, full_path_hboot_file) == 0) {
+			PRINT_PROGRESS("... the keyfile is good, copying it.");
+			copy_file(full_path_hboot_file, full_path_output_key_file);
+			exit_code = 0;
+		}
+		else {
+			PRINT_ERROR("... the keyfile provided did not decrypt the zip properly!");
+			exit_code = 2;
+		}
+	}
+	else if (check_magic(full_path_hboot_file, 0, BOOT_MAGIC)) {
+		PRINT_PROGRESS("... assuming hosd, going to unpack it...");
+
+
+// ALTERNATE METHOD NOT REQUIRING THE ENTIRE AIK
+// run unpack
+// run 7za
+// run bruutveal on ramdisk (dont even need to unpack it)
+
+#ifdef USE_SYSTEM_CALL
+		res = system_args("%s/"AIK_UNPACK" %s", full_path_to_bins.c_str(), full_path_hboot_file);
+#else
+		std::string full_path_to_AIK_script;
+
+		full_path_to_AIK_script = full_path_to_bins;
+		full_path_to_AIK_script += "/";
+		full_path_to_AIK_script += AIK_UNPACK;
+
+		res = run_program(full_path_to_AIK_script.c_str(), full_path_hboot_file, NULL);
+#endif
+
+		if (res == 0) {
+			std::string downloadzip = full_path_to_bins + "/" + AIK_BASE + "/ramdisk/sbin/downloadzip";
+			if (access(downloadzip.c_str(), R_OK) == 0) {
+				if (Run_BRUUTVEAL(downloadzip.c_str(), full_path_encrypted_zip_file, full_path_output_key_file) == 0) {
+					exit_code = 0;
+				}
+			}
+			else {
+				PRINT_ERROR("hosd unpacked, but couldn't access downloadzip file");
+				exit_code = 3;
+			}
+		}
+		else {
+			PRINT_ERROR("Unable to unpack hosd (res=%i)", res);
+			exit_code = 4;
+		}
+
+#ifdef USE_SYSTEM_CALL
+		system_args("%s/"AIK_CLEANUP, full_path_to_bins.c_str());
+#else
+		full_path_to_AIK_script = full_path_to_bins;
+		full_path_to_AIK_script += "/";
+		full_path_to_AIK_script += AIK_CLEANUP;
+
+		run_program(full_path_to_AIK_script.c_str(), NULL);
+#endif
+
+	}
+	else {
+		PRINT_PROGRESS("... assuming hboot...");
+		if (Run_BRUUTVEAL(full_path_hboot_file, full_path_encrypted_zip_file, full_path_output_key_file) == 0) {
+			exit_code = 0;
+		}
+	}
+
+	// if (foundkey) should we double check that key by testing it?
+
+	return exit_code;
+}
+
+int KeyFinder_CheckKeyfilesFolder(const char *full_path_encrypted_zip_file, const char *full_path_keys, const char *full_path_output_key_file)
+{
+	PRINT_INFO("");
+	PRINT_PROGRESS("No proper keyfile, trying known keys instead...");
+
+	int exit_code = 1;
+	int res;
+	int i;
+	int num_of_keys;
+	struct dirent **entry_list;
+
+	num_of_keys = scandir(full_path_keys, &entry_list, select_files_keyfiles, versionsort);
+	if (is_scandir_error(entry_list, num_of_keys)) {
+		exit_code = 2;
+	}
+	else {
+		for (i = 0; i < num_of_keys; i++) {
+			char * keyfile = entry_list[i]->d_name;
+			std::string full_path_key_file = (std::string) full_path_keys + "/" + keyfile;
+
+			if (Test_KeyFile(full_path_encrypted_zip_file, full_path_key_file.c_str()) == 0) {
+				exit_code = 0;
+				if ((res = copy_file(full_path_key_file.c_str(), full_path_output_key_file)) != 0) {
+					PRINT_ERROR("Found keyfile '%s', but couldn't copy it (res=%i)", full_path_key_file.c_str(), res);
+					exit_code = 3;
+				}
+				break;
+			}
+		}
+		free_dirent_entry_list(entry_list, num_of_keys);
+	}
+
+	return exit_code;
+}
+
+int KeyFinder_CheckRuuvealKeys(const char *full_path_encrypted_zip_file)
+{
+	int exit_code = 1;
+
+	PRINT_INFO("");
+	PRINT_INFO("");
+	PRINT_PROGRESS("Still no proper keyfile, trying all ruuveal built-in keys...");
+
+	htc_device_t *ptr;
+
+	for(ptr = htc_get_devices(); *ptr->name; ptr++) {
+		ruuveal_device = ptr->name;
+
+		if (Test_KeyFile(full_path_encrypted_zip_file, NULL) == 0) {
+			exit_code = 0;
+			break;
+		}
+	}
+
+	if (exit_code != 0)
+		ruuveal_device.clear();
+
+	return exit_code;
+}
+
+int KeyFinder_TryForceExtraction(const char *full_path_encrypted_zip_file, const char *full_path_output_key_file)
+{
+	PRINT_INFO("");
+	PRINT_PROGRESS("Trying force extraction of hboot/hosd...");
+
+	int exit_code = 1;
+	int i;
+	int num_of_zips;
+	int num_of_files;
+	struct dirent **entry_list;
+
+	mkdir("tmp", 0777);
+
+	// try to extract hboot or hosd
+	num_of_zips = scandir(".", &entry_list, select_files_zip, versionsort);
+	if (is_scandir_error(entry_list, num_of_zips)) {
+		exit_code = 2;
+	}
+	else {
+		for (i = 0; i < num_of_zips; i++) {
+			char * zip_file = entry_list[i]->d_name;
+
+			// disregard any errors
+#ifdef USE_SYSTEM_CALL
+			system_args("unzip -n %s %s %s -d %s", zip_file, "hboot*", "hosd*", "tmp");
+#else
+			run_program("unzip", "-n", zip_file, "hboot*", "hosd*", "-d", "tmp", NULL);
+#endif
+
+		}
+		free_dirent_entry_list(entry_list, num_of_zips);
+	}
+
+	// if we did get files, let's try them out
+	num_of_files = scandir("tmp", &entry_list, select_files_any, versionsort);
+	if (num_of_files < 0) {
+		PRINT_ERROR("scandir error");
+		exit_code = 3;
+	}
+	else if (num_of_files > 0) {
+		for (i = 0; i < num_of_files; i++) {
+			std::string test_file = "tmp";
+			test_file += "/";
+			test_file += entry_list[i]->d_name;
+
+			if (KeyFinder_CheckInputFile(full_path_encrypted_zip_file, test_file.c_str(), full_path_output_key_file) == 0) {
+				exit_code = 0; // yay
+			}
+		}
+		free_dirent_entry_list(entry_list, num_of_files);
+	}
+
+	delete_dir_contents("tmp");
+	remove("tmp");
+
+	return exit_code;
+}
+
+
 int KeyFinder(const char *path_inp_enczipfiles, const char *full_path_keys, const char *full_path_hboot_file, const char *path_out_key_file)
 {
 	PRINT_TITLE("Attempting to find suitable keyfile");
@@ -776,76 +987,16 @@ int KeyFinder(const char *path_inp_enczipfiles, const char *full_path_keys, cons
 
 	int is_user_supplied = (full_path_hboot_file != NULL) && full_path_hboot_file[0] != '\x00';
 
-
-	// try forcing extraction of hboot or host
-
 	int foundkey = 0;
 
 	if (is_user_supplied) {
-		// check if keyfile																			> test
-		// check if hboot									-> then bruutveal using hboot			> test
-		// check if hosd 		-> extract downloadzip 		-> then bruutveal using downloadzip		> test
-
-		if (file_size(full_path_hboot_file) == 96) {
-			PRINT_INFO("");
-			PRINT_PROGRESS("User supplied keyfile, going to test it...");
-
-			if (Test_KeyFile(full_path_encrypted_zip_file.c_str(), full_path_hboot_file) == 0) {
-				PRINT_PROGRESS("... the keyfile is good, copying it.");
-				copy_file(full_path_hboot_file, full_path_output_key_file.c_str());
-				foundkey = 1;
-			}
-			else {
-				PRINT_ERROR("... the keyfile provided did not decrypt the zip properly!");
-			}
-		}
-		else if (check_magic(full_path_hboot_file, 0, BOOT_MAGIC)) {
-			PRINT_INFO("");
-			PRINT_PROGRESS("User supplied hosd...");
-
-
-// ALTERNATE METHOD NOT REQUIRING THE ENTIRE AIK
-// run unpack
-// run 7za
-// run bruutveal on ramdisk (dont even need to unpack it)
-
-#ifdef USE_SYSTEM_CALL
-			res = system_args("%s/"AIK_UNPACK" %s", full_path_to_bins.c_str(), full_path_hboot_file);
-#else
-			res = run_program((full_path_to_bins + "/" + AIK_UNPACK).c_str(), full_path_hboot_file, NULL);
-#endif
-
-			if (res == 0) {
-				std::string downloadzip = full_path_to_bins + "/" + AIK_BASE + "/ramdisk/sbin/downloadzip";
-				if (access(downloadzip.c_str(), R_OK) == 0) {
-					if (Run_BRUUTVEAL(downloadzip.c_str(), full_path_encrypted_zip_file.c_str(), full_path_output_key_file.c_str()) == 0) {
-						foundkey = 1;
-					}
-				}
-				else {
-					PRINT_ERROR("hosd unpacked, but couldn't access downloadzip file");
-				}
-			}
-			else {
-				PRINT_ERROR("Unable to unpack hosd (res=%i)", res);
-			}
-
-#ifdef USE_SYSTEM_CALL
-			system_args("%s/"AIK_CLEANUP, full_path_to_bins.c_str());
-#else
-			run_program((full_path_to_bins + "/" + AIK_CLEANUP).c_str(), NULL);
-#endif
-
-		}
-		else {
-			PRINT_INFO("");
-			PRINT_PROGRESS("User supplied hboot....");
-			if (Run_BRUUTVEAL(full_path_hboot_file, full_path_encrypted_zip_file.c_str(), full_path_output_key_file.c_str()) == 0) {
-				foundkey = 1;
-			}
-		}
-
-		// if (foundkey) should we double check that key by testing it?
+		PRINT_INFO("");
+		PRINT_PROGRESS("User supplied keyfile / hboot / hosd, going to test/generate...");
+		res = KeyFinder_CheckInputFile(full_path_encrypted_zip_file.c_str(), full_path_hboot_file, full_path_output_key_file.c_str());
+		if (res == 0)
+			foundkey = 1;
+		else if (res > 1)
+			PRINT_ERROR("in function CheckInputFile (res=%i)", res);
 	}
 
 	if (!foundkey && !ruuveal_device.empty()) {
@@ -856,54 +1007,34 @@ int KeyFinder(const char *path_inp_enczipfiles, const char *full_path_keys, cons
 		}
 	}
 
-	// if we still don't have a key, try all known keys
 	if (!foundkey) {
-		PRINT_INFO("");
-		PRINT_PROGRESS("No proper keyfile, trying known keys instead...");
-		// if failed, try known decryption keys
-		int i;
-		int num_of_keys;
-		struct dirent **entry_list;
-
-		num_of_keys = scandir(full_path_keys, &entry_list, select_files_keyfiles, versionsort);
-		if (is_scandir_error(entry_list, num_of_keys)) {
-			exit_code = 2;
-		}
-		else {
-			for (i = 0; i < num_of_keys; i++) {
-				char * keyfile = entry_list[i]->d_name;
-				std::string full_path_key_file = (std::string) full_path_keys + "/" + keyfile;
-
-				if (Test_KeyFile(full_path_encrypted_zip_file.c_str(), full_path_key_file.c_str()) == 0) {
-					foundkey = 1;
-					if ((res = copy_file(full_path_key_file.c_str(), full_path_output_key_file.c_str())) != 0) {
-						PRINT_ERROR("Found keyfile '%s', but couldn't copy it (res=%i)", full_path_key_file.c_str(), res);
-						exit_code = 3;
-					}
-					break;
-				}
-			}
-			free_dirent_entry_list(entry_list, num_of_keys);
-		}
+		// try forcing extraction of hboot or hosd
+		// this is a longshot and will likely not work, except for the RUUs that have the first zip signed but not encrypted
+		res = KeyFinder_TryForceExtraction(full_path_encrypted_zip_file.c_str(), full_path_output_key_file.c_str());
+		if (res == 0)
+			foundkey = 1;
+		else if (res > 1)
+			PRINT_ERROR("in function TryForceExtraction (res=%i)", res);
 	}
 
+
 	// if we still don't have a key, try all known keys
 	if (!foundkey) {
-		PRINT_INFO("");
-		PRINT_INFO("");
-		PRINT_PROGRESS("Still no proper keyfile, trying all ruuveal built-in keys...");
+		res = KeyFinder_CheckKeyfilesFolder(full_path_encrypted_zip_file.c_str(), full_path_keys, full_path_output_key_file.c_str());
+		if (res == 0)
+			foundkey = 1;
+		else if (res > 1)
+			PRINT_ERROR("in function CheckKeyfilesFolder (res=%i)", res);
+	}
 
-		htc_device_t *ptr;
-
-		for(ptr = htc_get_devices(); *ptr->name; ptr++) {
-			ruuveal_device = ptr->name;
-
-			if (Test_KeyFile(full_path_encrypted_zip_file.c_str(), NULL) == 0) {
-				foundkey = 1;
-				break;
-			}
-		}
-
+	// if we still don't have a key, try all ruuveal device keys
+	if (!foundkey) {
+		// if it's found then ruuveal_device will be updated
+		res = KeyFinder_CheckRuuvealKeys(full_path_encrypted_zip_file.c_str());
+		if (res == 0)
+			foundkey = 1;
+		else if (res > 1)
+			PRINT_ERROR("in function CheckRuuvealKeys (res=%i)", res);
 	}
 
 	if (!foundkey || exit_code) {
