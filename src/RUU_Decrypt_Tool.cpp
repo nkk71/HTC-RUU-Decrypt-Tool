@@ -38,18 +38,18 @@
 #include <iostream>
 
 
-#ifdef __CYGWIN__
+#if defined(__CYGWIN__)
 
 #include <sys/cygwin.h>
 
 // scandir stuff missing in cygwin
-#include "strverscmp.c"
-#include "versionsort.c"
+#include "versionsort/strverscmp.c"
+#include "versionsort/versionsort.c"
 
 #endif
 
 //#if defined(WIN32) || defined(_WIN32) || defined(__WIN32)
-#ifdef __CYGWIN__
+#if defined(__CYGWIN__)
 
 #define AIK_BASE		"AIK-Windows"
 #define AIK_UNPACK		AIK_BASE"/unpackimg.bat"
@@ -64,7 +64,7 @@
 #endif //__CYGWIN__
 
 
-#define VERSION_STRING "3.0.2"
+#define VERSION_STRING "3.0.7"
 
 
 // folders
@@ -102,8 +102,9 @@
 // (this works fine in linux, but breaks in cygwin, because i'm not including /bin/sh
 
 // #define USE_SYSTEM_CALL
-// ----------------------------------------------------------------------------------
 
+
+// ----------------------------------------------------------------------------------
 // MAX_EXEC_ARGS is the maximum number of arguments passed through exec() calls,
 // needs to accomodate the max number of args when using run_program
 // including the max system*.img* files
@@ -167,14 +168,28 @@ int do_immediate_cleanup = 1;
 int create_system_only = 0;
 int create_firmware_only = 0;
 int create_sd_zip = 0;
+int print_debug_info = 0;
 std::string ruuveal_device;
 
+// =====================================================================
+// use this basename for portability (for mac os)
+const char *get_basename(const char *path_file)
+{
+	//note: we're assuming it's not a path ending with /
+	//      since it wont be in this program
+	const char *last_slash = strrchr(path_file, '/');
+
+	if (last_slash == NULL)
+		return path_file;
+	else
+		return (last_slash+1);
+}
 // =====================================================================
 // file operations
 // ---------------------------------------------------------------------
 std::string convert_to_absolute_path(const char *path)
 {
-#ifdef __CYGWIN__
+#if defined(__CYGWIN__)
 	char winpath[PATH_MAX];
 
 	if (cygwin_conv_path(CCP_ABSOLUTE | CCP_POSIX_TO_WIN_A, path, winpath, PATH_MAX) != 0) {
@@ -209,14 +224,25 @@ std::string get_absolute_cwd(void)
 	return convert_to_absolute_path(getcwd(NULL, 0));
 }
 // ---------------------------------------------------------------------
+#if defined(__CYGWIN__)
+int win_path_has_spaces(const char *path)
+{
+	std::string abs_path = convert_to_absolute_path(path);
+	if (abs_path.find(' ') !=  std::string::npos)
+		return 1;
+	else
+		return 0;
+}
+#endif
+// ---------------------------------------------------------------------
 int change_dir(const char *path)
 {
 	if (chdir(path) != 0) {
 		PRINT_ERROR("Couldn't cd to '%s'", path);
-		return 0;
+		return 1;
 	}
 	else
-		return 1;
+		return 0;
 }
 
 int change_dir(const std::string *path)
@@ -231,6 +257,8 @@ int change_dir(const std::string path)
 // ---------------------------------------------------------------------
 int copy_file(const char *source, const char *destination, int skip = 0)
 {
+	int exit_code = 0;
+
 	std::ifstream srcfile(source, std::ios::binary);
 	std::ofstream dstfile(destination, std::ios::binary | std::ios::out);
 
@@ -239,7 +267,11 @@ int copy_file(const char *source, const char *destination, int skip = 0)
 	srcfile.close();
 	dstfile.close();
 
-	return 0;
+	if (!dstfile) {
+		PRINT_ERROR("in copy_file, from '%s' to '%s'", source, destination);
+		exit_code = 3;
+	}
+	return exit_code;
 }
 
 int copy_file(const std::string *source, const std::string *destination, int skip = 0)
@@ -249,6 +281,8 @@ int copy_file(const std::string *source, const std::string *destination, int ski
 // ---------------------------------------------------------------------
 int append_file(const char *source, const char *destination)
 {
+	int exit_code = 0;
+
 	std::ifstream srcfile(source, std::ios::binary);
 	std::ofstream dstfile(destination, std::ios::binary | std::ios::out | std::ios::app);
 
@@ -257,7 +291,12 @@ int append_file(const char *source, const char *destination)
 	srcfile.close();
 	dstfile.close();
 
-	return 0;
+	if (!dstfile) {
+		PRINT_ERROR("in append_file, from '%s' to '%s'", source, destination);
+		exit_code = 3;
+	}
+
+	return exit_code;
 }
 // ---------------------------------------------------------------------
 int move_file(const char *source, const char *destination)
@@ -379,15 +418,40 @@ int system_args(const char *fmt, ...)
 	va_list ap;
 	va_start(ap, fmt);
 
-	ret = vsnprintf(cmd, sizeof(cmd), fmt, ap);
-	if(ret < (int)sizeof(cmd))
-	{
-		ret = system(cmd);
+	// we're no longer adding our bin folder to PATH so prepend full_path_to_bins if needed
+	std::string full_path_to_bin_file = fmt;
+	std::string args = fmt;
+
+	if (full_path_to_bin_file.find_first_of(' ') == std::string::npos) {
+		full_path_to_bin_file = full_path_to_bins + "/" + full_path_to_bin_file; // no arguments
+		args = "";
 	}
+	else {
+		full_path_to_bin_file = full_path_to_bins + "/" + full_path_to_bin_file.substr(0, full_path_to_bin_file.find_first_of(' ')); // get the command only
+		args = args.substr(args.find_first_of(' '));
+	}
+
+
+	if (access(full_path_to_bin_file.c_str(), F_OK) == 0)
+		ret = vsnprintf(cmd, sizeof(cmd), ('"' + full_path_to_bin_file + '"' + args).c_str(), ap);
 	else
-	{
+		ret = vsnprintf(cmd, sizeof(cmd), fmt, ap);
+
+
+	if (print_debug_info) {
+		printf("[DBG] about to system(): '%s'\n\n", cmd);
+	}
+
+
+	if(ret < (int)sizeof(cmd))
+		ret = system(cmd);
+	else {
 		char *buff = new char[ret+1];
-		vsnprintf(buff, ret+1, fmt, ap);
+
+		if (access(full_path_to_bin_file.c_str(), F_OK) == 0)
+			vsnprintf(buff, ret+1, ('"' + full_path_to_bin_file + '"' + args).c_str(), ap);
+		else
+			vsnprintf(buff, ret+1, fmt, ap);
 
 		ret = system(buff);
 
@@ -420,6 +484,8 @@ int run_program(const char *bin_to_run, char *argv[])
 		i = 0;
 		j = 0;
 
+		std::string full_path_to_bin_file = full_path_to_bins + "/" + bin_to_run;
+
 		exec_args[i++] = (char *)bin_to_run;
 
 		if (argv == NULL) {
@@ -431,25 +497,43 @@ int run_program(const char *bin_to_run, char *argv[])
 			} while (exec_args[i-1] != NULL);
 		}
 
-
-		//debug info
-		/*
-		{
-			printf("1) about to execvp: '%s'", bin_to_run);
-			int i = 0;
-			while (exec_args[i] != NULL) {
-				printf(" '%s'", exec_args[i++]);
+		if (access(full_path_to_bin_file.c_str(), F_OK) == 0) {
+			if (print_debug_info) {
+				printf("[DBG] about to execv (run internal program): '%s'\n", bin_to_run);
+				i = 0;
+				while (exec_args[i] != NULL) {
+					printf("[DBG]    '%s'\n", exec_args[i++]);
+				}
+				printf("\n");
 			}
-			printf("\n");
+			execv(full_path_to_bin_file.c_str(), exec_args); // our binaries
 		}
-		*/
-
-		execvp(bin_to_run, exec_args);
+		else {
+			if (print_debug_info) {
+				printf("[DBG] about to execvp (run system program): '%s'\n", bin_to_run);
+				i = 0;
+				while (exec_args[i] != NULL) {
+					printf("[DBG]    '%s'\n", exec_args[i++]);
+				}
+				printf("\n");
+			}
+			execvp(bin_to_run, exec_args); // OS provided binaries
+		}
 
 		// we should not get here unless an error in exec() occurred
 		PRINT_ERROR("something went wrong with exec() (errno=%i '%s')!", errno, strerror(errno));
+		if (access(full_path_to_bin_file.c_str(), F_OK) == 0)
+			printf("offending execv: '%s'", full_path_to_bin_file.c_str());
+		else
+			printf("offending execvp: '%s'", bin_to_run);
 
-		raise(SIGINT); // abort program
+		i = 0;
+		while (exec_args[i] != NULL) {
+			printf(" '%s'", exec_args[i++]);
+		}
+		printf("\n");
+
+		// this is not working as intended: raise(SIGINT); // abort program
 
 		exit_code = -2;
 		return exit_code;
@@ -605,7 +689,7 @@ int Check_If_New_Keyfile(const char *path_new_key_file, const char *full_path_ke
 
 	std::string path_base = get_absolute_cwd();
 
-	if (!change_dir(full_path_keys))
+	if (change_dir(full_path_keys))
 		return 2;
 
 
@@ -669,7 +753,7 @@ int Check_If_New_Keyfile(const char *path_new_key_file, const char *full_path_ke
 int Test_KeyFile(const char *path_enczip, const char *path_keyfile)
 {
 	if (ruuveal_device.empty())
-		PRINT_PROGRESS("Testing keyfile '%s'...", basename(path_keyfile));
+		PRINT_PROGRESS("Testing keyfile '%s'...", get_basename(path_keyfile));
 	else
 		PRINT_PROGRESS("Testing ruuveal device '%s'...", ruuveal_device.c_str());
 
@@ -678,9 +762,9 @@ int Test_KeyFile(const char *path_enczip, const char *path_keyfile)
 
 #ifdef USE_SYSTEM_CALL
 				if (ruuveal_device.empty())
-					res = system_args("ruuveal -K %s %s %s > /dev/null 2>&1", path_keyfile, path_enczip, "tmpzip.zip");
+					res = system_args("ruuveal -K %s \"%s\" %s > /dev/null 2>&1", path_keyfile, path_enczip, "tmpzip.zip");
 				else
-					res = system_args("ruuveal --device %s %s %s > /dev/null 2>&1", ruuveal_device.c_str(), path_enczip, "tmpzip.zip");
+					res = system_args("ruuveal --device %s \"%s\" %s > /dev/null 2>&1", ruuveal_device.c_str(), path_enczip, "tmpzip.zip");
 #else
 				// /dev/null 2>&1 redirection doesnt work this way in fork
 				if (ruuveal_device.empty())
@@ -781,7 +865,7 @@ int Run_BRUUTVEAL(const char *path_hboot_file, const char *path_encrypted_zip_fi
 	else {
 
 #ifdef USE_SYSTEM_CALL
-		res = system_args("bruutveal %s %s %s", path_hboot_file, path_encrypted_zip_file, path_output_key_file);
+		res = system_args("bruutveal \"%s\" \"%s\" \"%s\"", path_hboot_file, path_encrypted_zip_file, path_output_key_file);
 #else
 		res = run_program("bruutveal", path_hboot_file, path_encrypted_zip_file, path_output_key_file, NULL);
 #endif
@@ -842,22 +926,45 @@ int KeyFinder_CheckInputFile(const char *full_path_encrypted_zip_file, const cha
 		PRINT_PROGRESS("... assuming hosd, going to unpack it...");
 
 
-// ALTERNATE METHOD NOT REQUIRING THE ENTIRE AIK
-// run unpack
-// run 7za
-// run bruutveal on ramdisk (dont even need to unpack it)
+		// ALTERNATE METHOD NOT REQUIRING THE ENTIRE AIK
+		// run unpack
+		// run 7za
+		// run bruutveal on ramdisk (dont even need to unpack it)
+
+#if defined(__CYGWIN__)
+		// no "reliable" method of invoking AIK by full path, in cygwin when both bin path and hosd path have spaces,
+		// windows "cmd /C ..." would need double quotes, eg: cmd /C ""path with spaces to exe" "path to file with spaces""
+		// which doesnt work, so temp copy the file to AIK and run (in most cases this should be writeable if it's not, fail)
+		// maybe i should just get rid of it completely, and use the alternate method -_-
+		if (win_path_has_spaces(full_path_to_bins.c_str()) && win_path_has_spaces(full_path_hboot_file)) {
+			std::string aik_tmp_hosd = full_path_to_bins + "/" + AIK_BASE + "/" + "tmp_hosd";
+
+			if (print_debug_info)
+				printf("[DBG] the Tool path and the RUU path contain spaces; temporarily copy hosd file into the AIK folder\n\n");
+
+			if (copy_file(full_path_hboot_file, aik_tmp_hosd.c_str()) != 0) {
+				PRINT_ERROR("the Tool path and the RUU path contain spaces; temporarily copy hosd file into the AIK folder failed!");
+				exit_code = 5;
+			}
+			else {
+				#ifdef USE_SYSTEM_CALL
+				res = system_args(AIK_UNPACK" %s", "tmp_hosd");
+				#else
+				res = run_program(AIK_UNPACK, "tmp_hosd", NULL);
+				#endif
+
+				delete_file(aik_tmp_hosd.c_str());
+			}
+		}
+		else // { // no brackets are needed since the next command is only one line, otherwise we'd need them!!
+#endif  //__CYGWIN__
 
 #ifdef USE_SYSTEM_CALL
-		res = system_args("%s/"AIK_UNPACK" %s", full_path_to_bins.c_str(), full_path_hboot_file);
+		res = system_args(AIK_UNPACK" \"%s\"", full_path_hboot_file);
 #else
-		std::string full_path_to_AIK_script;
-
-		full_path_to_AIK_script = full_path_to_bins;
-		full_path_to_AIK_script += "/";
-		full_path_to_AIK_script += AIK_UNPACK;
-
-		res = run_program(full_path_to_AIK_script.c_str(), full_path_hboot_file, NULL);
+		res = run_program(AIK_UNPACK, full_path_hboot_file, NULL);
 #endif
+
 
 		if (res == 0) {
 			std::string downloadzip = full_path_to_bins + "/" + AIK_BASE + "/ramdisk/sbin/downloadzip";
@@ -877,15 +984,10 @@ int KeyFinder_CheckInputFile(const char *full_path_encrypted_zip_file, const cha
 		}
 
 #ifdef USE_SYSTEM_CALL
-		system_args("%s/"AIK_CLEANUP, full_path_to_bins.c_str());
+		system_args(AIK_CLEANUP);
 #else
-		full_path_to_AIK_script = full_path_to_bins;
-		full_path_to_AIK_script += "/";
-		full_path_to_AIK_script += AIK_CLEANUP;
-
-		run_program(full_path_to_AIK_script.c_str(), NULL);
+		run_program(AIK_CLEANUP, NULL);
 #endif
-
 	}
 	else {
 		PRINT_PROGRESS("... assuming hboot...");
@@ -970,6 +1072,8 @@ int KeyFinder_TryForceExtraction(const char *full_path_encrypted_zip_file, const
 	int num_of_files;
 	struct dirent **entry_list;
 
+	std::string path_base = get_absolute_cwd();
+
 	mkdir("tmp", 0777);
 
 	// try to extract hboot or hosd
@@ -983,7 +1087,7 @@ int KeyFinder_TryForceExtraction(const char *full_path_encrypted_zip_file, const
 
 			// disregard any errors
 #ifdef USE_SYSTEM_CALL
-			system_args("unzip -n %s %s %s -d %s", zip_file, "hboot*", "hosd*", "tmp");
+			system_args("unzip -n \"%s\" %s %s -d %s", zip_file, "hboot*", "hosd*", "tmp");
 #else
 			run_program("unzip", "-n", zip_file, "hboot*", "hosd*", "-d", "tmp", NULL);
 #endif
@@ -1000,15 +1104,16 @@ int KeyFinder_TryForceExtraction(const char *full_path_encrypted_zip_file, const
 	}
 	else if (num_of_files > 0) {
 		for (i = 0; i < num_of_files; i++) {
-			std::string test_file = "tmp";
-			test_file += "/";
-			test_file += entry_list[i]->d_name;
+			std::string full_path_test_file = path_base + "/" + "tmp" + "/" + entry_list[i]->d_name;
 
-			if (KeyFinder_CheckInputFile(full_path_encrypted_zip_file, test_file.c_str(), full_path_output_key_file) == 0) {
+			if (KeyFinder_CheckInputFile(full_path_encrypted_zip_file, full_path_test_file.c_str(), full_path_output_key_file) == 0) {
 				exit_code = 0; // yay
 			}
 		}
 		free_dirent_entry_list(entry_list, num_of_files);
+	}
+	else {
+		PRINT_PROGRESS("no files were force-extracted.");
 	}
 
 	delete_dir_contents("tmp");
@@ -1026,7 +1131,7 @@ int KeyFinder(const char *path_inp_enczipfiles, const char *full_path_keys, cons
 	std::string full_path_output_key_file = path_base + "/" + path_out_key_file;
 
 	//we need to operate in the encrypted zips folder
-	if (!change_dir(path_inp_enczipfiles))
+	if (change_dir(path_inp_enczipfiles))
 		return 2;
 
 	std::string encrypted_zip = Find_First_Encrypted_ZIP();
@@ -1159,7 +1264,7 @@ int CreateSystemIMG(const char *path_inp_sysimgfiles, const char *path_output_sy
 	std::string full_path_output_system_img_file = path_base + "/" + path_output_system_img_file;
 
 	// we need to operate in the system.img folder folder
-	if (!change_dir(path_inp_sysimgfiles))
+	if (change_dir(path_inp_sysimgfiles))
 		return 2;
 
 
@@ -1199,7 +1304,7 @@ int CreateSystemIMG(const char *path_inp_sysimgfiles, const char *path_output_sy
 			PRINT_PROGRESS("    Please be patient, this can take several minutes...");
 
 #ifdef USE_SYSTEM_CALL
-			res = system_args("simg2img %s %s", "system*", full_path_output_system_img_file.c_str());
+			res = system_args("simg2img %s \"%s\"", "system*", full_path_output_system_img_file.c_str());
 #else
 			// wildcards arent allowed in run_program
 			char * args[MAX_EXEC_ARGS];
@@ -1256,7 +1361,7 @@ int TestSystemIMG(const char *path_systemimg_file)
 	int exit_code = 0;
 
 #ifdef USE_SYSTEM_CALL
-	res = system_args("e2fsck -fn %s", path_systemimg_file);
+	res = system_args("e2fsck -fn \"%s\"", path_systemimg_file);
 #else
 	res = run_program("e2fsck", "-fn", path_systemimg_file, NULL);
 #endif
@@ -1323,7 +1428,7 @@ int DecryptZIPs(const char *path_inp_dumpedzips, const char *path_out_decryptedz
 	std::string full_path_key_file; if (path_key_file) full_path_key_file = path_base + "/" + path_key_file;
 
 	// we need to operate in the dumpedzips folder
-	if (!change_dir(path_inp_dumpedzips))
+	if (change_dir(path_inp_dumpedzips))
 		return 2;
 
 
@@ -1357,9 +1462,9 @@ int DecryptZIPs(const char *path_inp_dumpedzips, const char *path_out_decryptedz
 
 #ifdef USE_SYSTEM_CALL
 				if (ruuveal_device.empty())
-					res = system_args("ruuveal -K %s %s %s/dec_%s", full_path_key_file.c_str(), file_name, full_path_out_decryptedzips.c_str(), file_name);
+					res = system_args("ruuveal -K \"%s\" \"%s\" \"%s/dec_%s\"", full_path_key_file.c_str(), file_name, full_path_out_decryptedzips.c_str(), file_name);
 				else
-					res = system_args("ruuveal --device %s %s %s/dec_%s", ruuveal_device.c_str(), file_name, full_path_out_decryptedzips.c_str(), file_name);
+					res = system_args("ruuveal --device %s \"%s\" \"%s/dec_%s\"", ruuveal_device.c_str(), file_name, full_path_out_decryptedzips.c_str(), file_name);
 #else
 				if (ruuveal_device.empty())
 					res = run_program("ruuveal", "-K", full_path_key_file.c_str(), file_name, (full_path_out_decryptedzips + "/" + "dec_" + file_name).c_str(), NULL);
@@ -1390,7 +1495,7 @@ int DecryptZIPs(const char *path_inp_dumpedzips, const char *path_out_decryptedz
 					else {
 
 #ifdef USE_SYSTEM_CALL
-						res = system_args("unzip -q -t %s", output_file.c_str());
+						res = system_args("unzip -q -t \"%s\"", output_file.c_str());
 #else
 						res = run_program("unzip", "-q", "-t", output_file.c_str(), NULL);
 #endif
@@ -1411,7 +1516,7 @@ int DecryptZIPs(const char *path_inp_dumpedzips, const char *path_out_decryptedz
 					PRINT_PROGRESS("    normal zip, testing...");
 
 #ifdef USE_SYSTEM_CALL
-					res = system_args("unzip -q -t %s", file_name);
+					res = system_args("unzip -q -t \"%s\"", file_name);
 #else
 					res = run_program("unzip", "-q", "-t", file_name, NULL);
 #endif
@@ -1475,7 +1580,7 @@ int UnzipDecryptedZIPs(const char *path_inp_zips, const char *path_outfiles)
 	std::string full_path_to_outfiles = path_base + "/" + path_outfiles;
 
 	// operate in the zips folder
-	if (!change_dir(path_inp_zips))
+	if (change_dir(path_inp_zips))
 		return 2;
 
 
@@ -1499,11 +1604,11 @@ int UnzipDecryptedZIPs(const char *path_inp_zips, const char *path_outfiles)
 
 #ifdef USE_SYSTEM_CALL
 			if (create_system_only)
-				res = system_args("unzip -n %s %s %s -d %s", file_name, SYSTEMIMG, BOOTIMG, full_path_to_outfiles.c_str());
+				res = system_args("unzip -n \"%s\" \"%s\" \"%s\" -d \"%s\"", file_name, SYSTEMIMG, BOOTIMG, full_path_to_outfiles.c_str());
 			else if (create_firmware_only)
-				res = system_args("unzip -n %s -x %s -d %s", file_name, SYSTEMIMG, full_path_to_outfiles.c_str());
+				res = system_args("unzip -n \"%s\" -x \"%s\" -d \"%s\"", file_name, SYSTEMIMG, full_path_to_outfiles.c_str());
 			else
-				res = system_args("unzip -n %s -d %s", file_name, full_path_to_outfiles.c_str());
+				res = system_args("unzip -n \"%s\" -d \"%s\"", file_name, full_path_to_outfiles.c_str());
 #else
 			if (create_system_only)
 				res = run_program("unzip", "-n", file_name, SYSTEMIMG, BOOTIMG, "-d", full_path_to_outfiles.c_str(), NULL);
@@ -1555,7 +1660,7 @@ int MoveSystemIMGFiles(const char *path_inp_files, const char *path_outsystemimg
 	std::string full_path_to_outsystemimgs = path_base + "/" + path_outsystemimgs;
 
 	// operate in the files folder
-	if (!change_dir(path_inp_files))
+	if (change_dir(path_inp_files))
 		return 2;
 
 	int exit_code = 0;
@@ -1626,7 +1731,7 @@ int ExtractZIPs(const char *path_to_ruu_file, const char *path_out)
 
 
 	// ruuveal needs to operate in output folder
-	if (!change_dir(path_out))
+	if (change_dir(path_out))
 		return 2;
 
 
@@ -1643,7 +1748,7 @@ int ExtractZIPs(const char *path_to_ruu_file, const char *path_out)
 		PRINT_PROGRESS("LargeZip format detected, using ruuveal");
 
 #ifdef USE_SYSTEM_CALL
-		res = system_args("ruuveal -D %s %s", full_path_to_ruu_file.c_str(), "dmp.zip");
+		res = system_args("ruuveal -D \"%s\" %s", full_path_to_ruu_file.c_str(), "dmp.zip");
 #else
 		res = run_program("ruuveal", "-D", full_path_to_ruu_file.c_str(), "dmp.zip", NULL);
 #endif
@@ -1660,7 +1765,7 @@ int ExtractZIPs(const char *path_to_ruu_file, const char *path_out)
 		PRINT_PROGRESS("Normal Zip format detected, using unzip");
 
 #ifdef USE_SYSTEM_CALL
-		res = system_args("unzip %s", full_path_to_ruu_file.c_str());
+		res = system_args("unzip \"%s\"", full_path_to_ruu_file.c_str());
 #else
 		res = run_program("unzip", full_path_to_ruu_file.c_str(), NULL);
 #endif
@@ -1723,19 +1828,19 @@ android_info Parse_Android_Info(const char *path_android_info_file)
 /*==============================================================================================================================*/
 int UnRUU(const char *path_ruu_exe_name, const char *path_out)
 {
-	PRINT_TITLE("Extracting rom.zip from %s", basename(path_ruu_exe_name));
+	PRINT_TITLE("Extracting rom.zip from %s", get_basename(path_ruu_exe_name));
 
 	std::string path_base = get_absolute_cwd();
 
 	// we need to operate in the out folder since unruu only outputs to current
-	if (!change_dir(path_out))
+	if (change_dir(path_out))
 		return 2;
 
 	int exit_code = 0;
 	int res;
 
 #ifdef USE_SYSTEM_CALL
-	res = system_args("unruu %s", path_ruu_exe_name);
+	res = system_args("unruu \"%s\"", path_ruu_exe_name);
 #else
 	res = run_program("unruu", path_ruu_exe_name, NULL);
 #endif
@@ -1807,6 +1912,9 @@ int main(int argc, char **argv)
 		else if (!strcmp(arg, "--sdruuzip") || !strcmp(arg, "-z")) {
 			create_sd_zip = 1;
 		}
+		else if (!strcmp(arg, "--debuginfo") || !strcmp(arg, "-P")) {
+			print_debug_info = 1;
+		}
 		else if (!strcmp(arg, "--device") || !strcmp(arg, "-d")) {
 			if (argc > 0) {
 				ruuveal_device = argv[0];
@@ -1859,6 +1967,7 @@ int main(int argc, char **argv)
 		PRINT_INFO("   Debugging Options (not usually needed)");
 		PRINT_INFO("      -k, --keepall        keep all intermediary files");
 		PRINT_INFO("      -c, --slowcleanup    do a 'slow cleanup', ie dont delete files once partially processed");
+		PRINT_INFO("      -P, --debuginfo      print debug info (paths and exec)");
 		PRINT_INFO("");
 		PRINT_INFO("   Direct ruuveal support (needed for older devices)");
 		PRINT_INFO("      -d, --device DEVICE  specify device (this is only needed for old unruu supported devices)");
@@ -1935,22 +2044,33 @@ int main(int argc, char **argv)
 	// setup global paths
 	{
 		char full_path_to_self[PATH_MAX];
+		ssize_t len;
 
 		//realpath("/proc/self/exe", tst);
-		readlink("/proc/self/exe", full_path_to_self, sizeof(full_path_to_self));
+		len = readlink("/proc/self/exe", full_path_to_self, sizeof(full_path_to_self));
+		if (len == -1) {
+			PRINT_ERROR("in readlink");
+			return 2;
+		}
+		full_path_to_self[len] = '\x00'; // readlink does not null terminate!
+
+		if (print_debug_info) {
+			printf("[DBG] full_path_to_self='%s'\n", full_path_to_self);
+		}
 
 		full_path_to_maindir = full_path_to_self;
 		full_path_to_maindir = full_path_to_maindir.substr(0, full_path_to_maindir.find_last_of('/'));
 
-		// setup the path here; cygwin doesn't like the real absolute paths
-		std::string ENV_PATH =  full_path_to_maindir + "/" + "bin" + ":" + getenv("PATH");
-		setenv("PATH", ENV_PATH.c_str(), 1);
+#if defined(__CYGWIN__)
+		full_path_to_bins = full_path_to_maindir + "/" + "bin";
+#else
+		full_path_to_bins = convert_to_absolute_path(full_path_to_maindir) + "/" + "bin";
+#endif
 
 		full_path_to_maindir = convert_to_absolute_path(full_path_to_maindir);
 	}
 
 	full_path_to_keys = full_path_to_maindir + "/" + "keyfiles";
-	full_path_to_bins = full_path_to_maindir + "/" + "bin";
 
 
 	// deprecated: full_path_to_wrk  = full_path_to_maindir + "/" + OUT_MAIN;
@@ -1958,6 +2078,16 @@ int main(int argc, char **argv)
 	full_path_to_wrk = full_path_to_ruu_file;
 	full_path_to_wrk = full_path_to_wrk.substr(0, full_path_to_wrk.find_last_of('/')) + "/" + OUT_MAIN;
 
+	if (print_debug_info) {
+		printf("[DBG] full_path_to_maindir='%s'\n", full_path_to_maindir.c_str());
+		printf("[DBG] full_path_to_keys='%s'\n", full_path_to_keys.c_str());
+		printf("[DBG] full_path_to_bins'%s'\n", full_path_to_bins.c_str());
+		printf("[DBG] full_path_to_wrk'%s'\n", full_path_to_wrk.c_str());
+		printf("[DBG] full_path_to_ruu_file='%s'\n", full_path_to_ruu_file.c_str());
+		printf("[DBG] full_path_to_hb_file='%s'\n", full_path_to_hb_file.c_str());
+		printf("[DBG] PATH='%s'\n", getenv("PATH"));
+		printf("\n\n");
+	}
 
 	// all operations are going to be based in the wrk folder
 	// it will be used a "base" for all functions
@@ -1966,23 +2096,45 @@ int main(int argc, char **argv)
 		PRINT_ERROR("OUT folder already exists ('%s')\n       please delete it, we don't want to accidentally overwrite something you need.\n\n", full_path_to_wrk.c_str());
 		return 2;
 	}
-	mkdir(full_path_to_wrk.c_str(), 0777);
-	change_dir(full_path_to_wrk);
 
-	mkdir(OUT_FIRMWARE, 0777);				// all files extracted from decrypted.zips
-	mkdir(OUT_SYSTEM, 0777);				// assembled system.img
+	exit_code = mkdir(full_path_to_wrk.c_str(), 0777);
+	exit_code |= change_dir(full_path_to_wrk);
 
-	mkdir(TMP_ROMZIP, 0777);				// either extract from RUU.EXE or move rom.zip here
-	mkdir(TMP_DUMPED_ZIPS, 0777);			// individual zip files dumped from LargeZip or compressed Zip
-	mkdir(TMP_DECRYPTED_ZIPS, 0777);		// all decrypted.zips
-	mkdir(TMP_DECRYPTED_SYSIMGS, 0777);		// move system*.img* to here
+	if (exit_code == 0) {
+		exit_code |= mkdir(OUT_FIRMWARE, 0777);				// all files extracted from decrypted.zips
+		exit_code |= mkdir(OUT_SYSTEM, 0777);				// assembled system.img
 
-	mkdir("tmp", 0777);						// tmp folder for bruutveal, android-info extraction, ruuveal test, new_keyfile.bin
+		exit_code |= mkdir(TMP_ROMZIP, 0777);				// either extract from RUU.EXE or move rom.zip here
+		exit_code |= mkdir(TMP_DUMPED_ZIPS, 0777);			// individual zip files dumped from LargeZip or compressed Zip
+		exit_code |= mkdir(TMP_DECRYPTED_ZIPS, 0777);		// all decrypted.zips
+		exit_code |= mkdir(TMP_DECRYPTED_SYSIMGS, 0777);		// move system*.img* to here
 
+		exit_code |= mkdir("tmp", 0777);						// tmp folder for bruutveal, android-info extraction, ruuveal test, new_keyfile.bin
+	}
+
+	if (exit_code) {
+		PRINT_ERROR("Couldn't create [all] work folders, aborting!");
+		return 2;
+	}
+
+	std::string path_android_info_file;
+	android_info info;
 
 	// begin main processing
-	if (is_exe)
+	if (is_exe) {
 		exit_code = UnRUU(full_path_to_ruu_file.c_str(), TMP_ROMZIP);
+		if (exit_code == 0) {
+			// android-info from RUU.EXE, will get overwritten later if found in decrypted zip
+			path_android_info_file = find_file_from_pattern(TMP_ROMZIP, "*android-info*.txt*");
+			info = Parse_Android_Info(path_android_info_file.c_str());
+
+			PRINT_INFO("");
+			PRINT_INFO("Information extracted from RUU.EXE:");
+			if (!info.modelid.empty()) PRINT_INFO("    INFO: RUU modelid: %s", info.modelid.c_str());
+			if (!info.mainver.empty()) PRINT_INFO("    INFO: RUU mainver: %s", info.mainver.c_str());
+			PRINT_INFO("");
+		}
+	}
 	else {
 		PRINT_PROGRESS("Moving '%s' temporarily to working folder", path_ruuname.c_str());
 		exit_code = move_file(full_path_to_ruu_file.c_str(), TMP_ROMZIP"/rom.zip");
@@ -2054,69 +2206,70 @@ int main(int argc, char **argv)
 	if (exit_code == 0) exit_code = UnzipDecryptedZIPs(TMP_DECRYPTED_ZIPS, OUT_FIRMWARE);
 	if ((exit_code == 0) && !keep_all_files) delete_dir_contents(TMP_DECRYPTED_ZIPS);
 
+	if (exit_code == 0) {
+		if (!create_firmware_only) {
+			if (exit_code == 0) exit_code = MoveSystemIMGFiles(OUT_FIRMWARE, TMP_DECRYPTED_SYSIMGS);
 
-	if (!create_firmware_only) {
-		if (exit_code == 0) exit_code = MoveSystemIMGFiles(OUT_FIRMWARE, TMP_DECRYPTED_SYSIMGS);
+			if (exit_code == 0) exit_code = CreateSystemIMG(TMP_DECRYPTED_SYSIMGS, OUT_SYSTEM"/system.img");
+			if ((exit_code == 0) && !keep_all_files) delete_dir_contents(TMP_DECRYPTED_SYSIMGS);
 
-		if (exit_code == 0) exit_code = CreateSystemIMG(TMP_DECRYPTED_SYSIMGS, OUT_SYSTEM"/system.img");
-		if ((exit_code == 0) && !keep_all_files) delete_dir_contents(TMP_DECRYPTED_SYSIMGS);
+			if (exit_code == 0) exit_code = TestSystemIMG(OUT_SYSTEM"/system.img");
 
-		if (exit_code == 0) exit_code = TestSystemIMG(OUT_SYSTEM"/system.img");
-
-		PRINT_TITLE("Adding boot.img to the system folder");
-		std::string path_bootimg_file = find_file_from_pattern(OUT_FIRMWARE, BOOTIMG);
-		if (path_bootimg_file.empty()) {
-			PRINT_ERROR("Couldn't find a %s to copy to system folder.", BOOTIMG);
-		}
-		else if (create_system_only) {
-			PRINT_PROGRESS("Moving %s to %s", path_bootimg_file.c_str(), OUT_SYSTEM"/boot.img");
-			move_file(path_bootimg_file.c_str(), OUT_SYSTEM"/boot.img");
-		}
-		else {
-			PRINT_PROGRESS("Copying %s to %s", path_bootimg_file.c_str(), OUT_SYSTEM"/boot.img");
-			copy_file(path_bootimg_file.c_str(), OUT_SYSTEM"/boot.img");
-		}
-	}
-
-	std::string path_android_info_file = find_file_from_pattern(OUT_FIRMWARE, "*android-info*.txt*");
-	android_info info = Parse_Android_Info(path_android_info_file.c_str());
-
-	PRINT_TITLE("Checking keyfile state");
-	if (ruuveal_device.empty()) {
-		if (access("tmp/use_keyfile.bin", F_OK) == 0) {
-			int res;
-
-			res = Check_If_New_Keyfile("tmp/use_keyfile.bin", full_path_to_keys.c_str());
-
-			if (res > 1)
-				PRINT_ERROR("in Check_If_New_Keyfile (res=%i)", res);
-			else if (res == 0) {
-				PRINT_PROGRESS("Keyfile used already matches one in the keyfiles folder.");
-				delete_file("tmp/use_keyfile.bin");
+			PRINT_TITLE("Adding boot.img to the system folder");
+			std::string path_bootimg_file = find_file_from_pattern(OUT_FIRMWARE, BOOTIMG);
+			if (path_bootimg_file.empty()) {
+				PRINT_ERROR("Couldn't find a %s to copy to system folder.", BOOTIMG);
+			}
+			else if (create_system_only) {
+				PRINT_PROGRESS("Moving %s to %s", path_bootimg_file.c_str(), OUT_SYSTEM"/boot.img");
+				move_file(path_bootimg_file.c_str(), OUT_SYSTEM"/boot.img");
 			}
 			else {
-				// move and rename keyfile
-				std::string path_keyfile_file = info.modelid.substr(0, 4) + "_keyfile_" + info.mainver + ".bin";
-				PRINT_PROGRESS("Moving keyfile to %s", path_keyfile_file.c_str());
-				move_file("tmp/use_keyfile.bin", path_keyfile_file.c_str());
-
-				PRINT_INFO("");
-				PRINT_INFO("INFO: the keyfile '%s' generated appears to be new,", path_keyfile_file.c_str());
-				PRINT_INFO("      please consider sharing/uploading it, so it can be included in future");
-				PRINT_INFO("      releases of this tool, at:");
-				PRINT_INFO("http://forum.xda-developers.com/chef-central/android/tool-universal-htc-ruu-rom-decryption-t3382928");
-				PRINT_INFO("");
+				PRINT_PROGRESS("Copying %s to %s", path_bootimg_file.c_str(), OUT_SYSTEM"/boot.img");
+				copy_file(path_bootimg_file.c_str(), OUT_SYSTEM"/boot.img");
 			}
 		}
-		else
-			PRINT_PROGRESS("Unencrypted RUU, no keyfile was needed.");
-		//printf("modelid='%s' ver='%s' keyfile='%s'", info.modelid.c_str(), info.mainver.c_str(), path_keyfile_file.c_str());
-	}
-	else {
-		PRINT_PROGRESS("No keyfile was generated because ruuveal's built in '%s' device-key was used.", ruuveal_device.c_str());
+
+		path_android_info_file = find_file_from_pattern(OUT_FIRMWARE, "*android-info*.txt*");
+		info = Parse_Android_Info(path_android_info_file.c_str());
+
+		PRINT_TITLE("Checking keyfile state");
+		if (ruuveal_device.empty()) {
+			if (access("tmp/use_keyfile.bin", F_OK) == 0) {
+				int res;
+
+				res = Check_If_New_Keyfile("tmp/use_keyfile.bin", full_path_to_keys.c_str());
+
+				if (res > 1)
+					PRINT_ERROR("in Check_If_New_Keyfile (res=%i)", res);
+				else if (res == 0) {
+					PRINT_PROGRESS("Keyfile used already matches one in the keyfiles folder.");
+					delete_file("tmp/use_keyfile.bin");
+				}
+				else {
+					// move and rename keyfile
+					std::string path_keyfile_file = info.modelid.substr(0, 4) + "_keyfile_" + info.mainver + ".bin";
+					PRINT_PROGRESS("Moving keyfile to %s", path_keyfile_file.c_str());
+					move_file("tmp/use_keyfile.bin", path_keyfile_file.c_str());
+
+					PRINT_INFO("");
+					PRINT_INFO("INFO: the keyfile '%s' generated appears to be new,", path_keyfile_file.c_str());
+					PRINT_INFO("      please consider sharing/uploading it, so it can be included in future");
+					PRINT_INFO("      releases of this tool, at:");
+					PRINT_INFO("http://forum.xda-developers.com/chef-central/android/tool-universal-htc-ruu-rom-decryption-t3382928");
+					PRINT_INFO("");
+				}
+			}
+			else
+				PRINT_PROGRESS("Unencrypted RUU, no keyfile was needed.");
+			//printf("modelid='%s' ver='%s' keyfile='%s'", info.modelid.c_str(), info.mainver.c_str(), path_keyfile_file.c_str());
+		}
+		else {
+			PRINT_PROGRESS("No keyfile was generated because ruuveal's built in '%s' device-key was used.", ruuveal_device.c_str());
+		}
 	}
 
-	if (create_sd_zip) {
+	if (create_sd_zip && !info.modelid.empty()) {
 		PRINT_TITLE("Copying rom.zip to OUT for SD-Card flashing");
 		std::string path_sdzip_file = info.modelid.substr(0, 4) + "IMG.zip";
 		if (is_exe) {
