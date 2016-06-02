@@ -37,6 +37,19 @@
 #include <fstream>
 #include <iostream>
 
+// =====================================================================
+// OS dependant includes
+// ---------------------------------------------------------------------
+#if defined( __APPLE__)
+
+// versionsort is also not present in mac
+#include "versionsort/strverscmp.c"
+#include "versionsort/versionsort.c"
+// mac specific header
+#include <mach-o/dyld.h>
+
+#endif
+
 
 #if defined(__CYGWIN__)
 
@@ -47,7 +60,12 @@
 #include "versionsort/versionsort.c"
 
 #endif
+// =====================================================================
 
+
+// =====================================================================
+// AIK paths relative to bin/
+// ---------------------------------------------------------------------
 //#if defined(WIN32) || defined(_WIN32) || defined(__WIN32)
 #if defined(__CYGWIN__)
 
@@ -55,16 +73,24 @@
 #define AIK_UNPACK		AIK_BASE"/unpackimg.bat"
 #define AIK_CLEANUP		AIK_BASE"/cleanup.bat"
 
+#elif defined(__APPLE__)
+
+#define AIK_BASE		"AIK-OSX"
+#define AIK_UNPACK		AIK_BASE"/unpackimg.sh"
+#define AIK_CLEANUP		AIK_BASE"/cleanup.sh"
+
 #else
 
 #define AIK_BASE		"AIK-Linux"
 #define AIK_UNPACK		AIK_BASE"/unpackimg.sh"
 #define AIK_CLEANUP		AIK_BASE"/cleanup.sh"
 
-#endif //__CYGWIN__
+#endif //__CYGWIN__ __APPLE__
+// =====================================================================
 
 
-#define VERSION_STRING "3.0.7"
+
+#define VERSION_STRING "3.0.8"
 
 
 // folders
@@ -1873,7 +1899,8 @@ void signal_Handler(int sig_num)
 int main(int argc, char **argv)
 {
 	PRINT_TITLE("+++ Welcome to the HTC RUU Decryption Tool %s +++", VERSION_STRING);
-	PRINT_INFO ("         by nkk71 and Captain_Throwback         ");
+	PRINT_INFO ("        by  nkk71  and  Captain_Throwback        ");
+	PRINT_INFO ("          Mac OS X support by topjohnwu          ");
 	PRINT_INFO("");
 
 	int exit_code = 0;
@@ -2043,6 +2070,14 @@ int main(int argc, char **argv)
 
 	// setup global paths
 	{
+#if defined(__APPLE__)
+		char path[1024];
+		uint32_t size = sizeof(path);
+		_NSGetExecutablePath(path, &size);
+		full_path_to_maindir = path;
+		full_path_to_maindir = full_path_to_maindir.substr(0, full_path_to_maindir.find_last_of(".") - 1);
+
+#else
 		char full_path_to_self[PATH_MAX];
 		ssize_t len;
 
@@ -2060,6 +2095,7 @@ int main(int argc, char **argv)
 
 		full_path_to_maindir = full_path_to_self;
 		full_path_to_maindir = full_path_to_maindir.substr(0, full_path_to_maindir.find_last_of('/'));
+#endif
 
 #if defined(__CYGWIN__)
 		full_path_to_bins = full_path_to_maindir + "/" + "bin";
