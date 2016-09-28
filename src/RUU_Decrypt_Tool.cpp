@@ -2340,15 +2340,32 @@ int main(int argc, char **argv)
 	remove("tmp");
 	PRINT_INFO("");
 
-	if (!info.modelid.empty()) PRINT_INFO("INFO: RUU modelid: %s", info.modelid.c_str());
-	if (!info.mainver.empty()) PRINT_INFO("INFO: RUU mainver: %s", info.mainver.c_str());
+	std::string full_path_to_final_out;
+	full_path_to_final_out = full_path_to_wrk;
+
+	if (!info.modelid.empty()) {
+		PRINT_INFO("INFO: RUU modelid: %s", info.modelid.c_str());
+		full_path_to_final_out += "_" + info.modelid.substr(0, 4);
+	}
+	if (!info.mainver.empty()) {
+		PRINT_INFO("INFO: RUU mainver: %s", info.mainver.c_str());
+		full_path_to_final_out += "_" + info.mainver;
+	}
 	PRINT_INFO("");
+
+	if (access(full_path_to_final_out.c_str(), R_OK) == 0) {
+		PRINT_INFO("Folder '%s' already exists! Keeping files in OUT folder.", full_path_to_final_out.c_str());
+		PRINT_INFO("");
+		full_path_to_final_out = full_path_to_wrk;
+	}
+	else
+		rename(full_path_to_wrk.c_str(), full_path_to_final_out.c_str());
 
 	//Finished: 
 	if (exit_code == 0)
-		PRINT_FINISHED("Successfully extracted zip files to\n             '%s'", full_path_to_wrk.c_str());
+		PRINT_FINISHED("Successfully extracted zip files to\n             '%s'", full_path_to_final_out.c_str());
 	else
-		PRINT_FINISHED("Tool has finished but there was an error, please\n          check the console output and your OUT folder\n             '%s'", full_path_to_wrk.c_str());
+		PRINT_FINISHED("Tool has finished but there was an error, please\n          check the console output and your OUT folder\n             '%s'", full_path_to_final_out.c_str());
 
 	PRINT_INFO("");
 
