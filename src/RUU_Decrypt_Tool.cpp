@@ -1185,9 +1185,9 @@ int KeyFinder(const char *path_inp_enczipfiles, const char *full_path_keys, cons
 
 	int foundkey = 0;
 
-	if (is_user_supplied) {
+	if (!foundkey && is_user_supplied && (file_size(full_path_hboot_file) == 96)) {
 		PRINT_INFO("");
-		PRINT_PROGRESS("User supplied keyfile / hboot / hosd, going to test/generate...");
+		PRINT_PROGRESS("User supplied keyfile, going to test...");
 		res = KeyFinder_CheckInputFile(full_path_encrypted_zip_file.c_str(), full_path_hboot_file, full_path_output_key_file.c_str());
 		if (res == 0)
 			foundkey = 1;
@@ -1202,17 +1202,6 @@ int KeyFinder(const char *path_inp_enczipfiles, const char *full_path_keys, cons
 			foundkey = 1;
 		}
 	}
-
-	if (!foundkey) {
-		// try forcing extraction of hboot or hosd
-		// this is a longshot and will likely not work, except for the RUUs that have the first zip signed but not encrypted
-		res = KeyFinder_TryForceExtraction(full_path_encrypted_zip_file.c_str(), full_path_output_key_file.c_str());
-		if (res == 0)
-			foundkey = 1;
-		else if (res > 1)
-			PRINT_ERROR("in function TryForceExtraction (res=%i)", res);
-	}
-
 
 	// if we still don't have a key, try all known keys
 	if (!foundkey) {
@@ -1231,6 +1220,27 @@ int KeyFinder(const char *path_inp_enczipfiles, const char *full_path_keys, cons
 			foundkey = 1;
 		else if (res > 1)
 			PRINT_ERROR("in function CheckRuuvealKeys (res=%i)", res);
+	}
+
+	// bruutveal can be slow, so let's move it down here
+	if (!foundkey && is_user_supplied) {
+		PRINT_INFO("");
+		PRINT_PROGRESS("User supplied hboot / hosd, going to generate...");
+		res = KeyFinder_CheckInputFile(full_path_encrypted_zip_file.c_str(), full_path_hboot_file, full_path_output_key_file.c_str());
+		if (res == 0)
+			foundkey = 1;
+		else if (res > 1)
+			PRINT_ERROR("in function CheckInputFile (res=%i)", res);
+	}
+
+	if (!foundkey) {
+		// try forcing extraction of hboot or hosd
+		// this is a longshot and will likely not work, except for the RUUs that have the first zip signed but not encrypted
+		res = KeyFinder_TryForceExtraction(full_path_encrypted_zip_file.c_str(), full_path_output_key_file.c_str());
+		if (res == 0)
+			foundkey = 1;
+		else if (res > 1)
+			PRINT_ERROR("in function TryForceExtraction (res=%i)", res);
 	}
 
 	if (!foundkey || exit_code) {
