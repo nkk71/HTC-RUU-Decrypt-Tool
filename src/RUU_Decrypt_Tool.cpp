@@ -90,7 +90,7 @@
 
 
 
-#define VERSION_STRING "3.0.8"
+#define VERSION_STRING "3.1.0"
 
 
 // folders
