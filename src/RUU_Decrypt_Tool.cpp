@@ -638,7 +638,18 @@ int select_files_systemimg(const struct dirent *de)
 {
 	std::string file_name = de->d_name;
 
-	if ((file_name.find("system") != std::string::npos) && (file_name.find(".img") != std::string::npos))
+	// has to start with 'system' and contain '.img'
+	if ((strncmp(file_name.c_str(), "system", 6) == 0) && (file_name.find(".img") != std::string::npos))
+		return 1;
+	else
+		return 0;
+}
+
+int select_dirs(const struct dirent *de)
+{
+	if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
+		return 0;
+	else if (de->d_type == DT_DIR)
 		return 1;
 	else
 		return 0;
@@ -1294,7 +1305,7 @@ int KeyFinder(const char *path_inp_enczipfiles, const char *full_path_keys, cons
  */
 int CreateSystemIMG(const char *path_inp_sysimgfiles, const char *path_output_system_img_file)
 {
-	PRINT_TITLE("Attempting to create system.img");
+	PRINT_TITLE("Attempting to create '%s'", path_output_system_img_file);
 
 	std::string path_base = get_absolute_cwd();
 	std::string full_path_output_system_img_file = path_base + "/" + path_output_system_img_file;
@@ -1319,7 +1330,7 @@ int CreateSystemIMG(const char *path_inp_sysimgfiles, const char *path_output_sy
 	if (num_of_imgs == 1) {
 		char * file_name = entry_list[0]->d_name;
 		// Simple system.img
-		PRINT_PROGRESS("Single system.img found, moving it to output path");
+		PRINT_PROGRESS("Single '%s' found, moving it to output path", path_output_system_img_file);
 		if ((res = move_file(file_name, full_path_output_system_img_file.c_str()))) {
 			PRINT_ERROR("could not create system.img (err=%i)", res);
 			exit_code = 3;
@@ -1352,7 +1363,7 @@ int CreateSystemIMG(const char *path_inp_sysimgfiles, const char *path_output_sy
 #endif
 
 			if (res != 0) {
-				PRINT_ERROR("could not create system.img (err=%i)", res);
+				PRINT_ERROR("could not create '%s' (err=%i)", path_output_system_img_file, res);
 				exit_code = 4;
 			} else
 				PRINT_PROGRESS("finished.");
@@ -1363,7 +1374,7 @@ int CreateSystemIMG(const char *path_inp_sysimgfiles, const char *path_output_sy
 			PRINT_PROGRESS("    Please be patient, this can take several minutes...");
 			for (i = 0; i < num_of_imgs; i++) {
 				file_name = entry_list[i]->d_name;
-				PRINT_PROGRESS("    (%i/%i) %s -> system.img", i+1, num_of_imgs, file_name);
+				PRINT_PROGRESS("    (%i/%i) %s -> '%s'", i+1, num_of_imgs, file_name, path_output_system_img_file);
 				exit_code = append_file(file_name, full_path_output_system_img_file.c_str());
 
 				if (exit_code == 0 && do_immediate_cleanup) {
@@ -1379,7 +1390,7 @@ int CreateSystemIMG(const char *path_inp_sysimgfiles, const char *path_output_sy
 	free_dirent_entry_list(entry_list, num_of_imgs);
 
 	if (exit_code == 0)
-		PRINT_FINISHED("Successfully created system.img '%s'", path_output_system_img_file);
+		PRINT_FINISHED("Successfully created '%s'", path_output_system_img_file);
 
 	change_dir(path_base);
 
@@ -1391,7 +1402,7 @@ int CreateSystemIMG(const char *path_inp_sysimgfiles, const char *path_output_sy
 /*==============================================================================================================================*/
 int TestSystemIMG(const char *path_systemimg_file)
 {
-	PRINT_TITLE("Testing system.img...");
+	PRINT_TITLE("Testing '%s'...", path_systemimg_file);
 
 	int res;
 	int exit_code = 0;
@@ -1403,7 +1414,7 @@ int TestSystemIMG(const char *path_systemimg_file)
 #endif
 
 	if (res != 0) {
-		PRINT_ERROR("system.img is corrupt (err=%i)", res);
+		PRINT_ERROR("'%s' is corrupt (err=%i)", path_systemimg_file, res);
 		//delete_file("path_out/system.img");
 		//rmdir("$path_out");
 		exit_code = 5;
@@ -1422,7 +1433,7 @@ int TestSystemIMG(const char *path_systemimg_file)
 	*/
 
 	if (exit_code == 0)
-		PRINT_FINISHED("system.img successfully passed filesystem check");
+		PRINT_FINISHED("'%s' successfully passed filesystem check", path_systemimg_file);
 
 	return exit_code;
 }
@@ -1694,6 +1705,8 @@ int MoveSystemIMGFiles(const char *path_inp_files, const char *path_outsystemimg
 
 	std::string path_base = get_absolute_cwd();
 	std::string full_path_to_outsystemimgs = path_base + "/" + path_outsystemimgs;
+	std::string base_system_name;
+	std::size_t found;
 
 	// operate in the files folder
 	if (change_dir(path_inp_files))
@@ -1713,8 +1726,24 @@ int MoveSystemIMGFiles(const char *path_inp_files, const char *path_outsystemimg
 		// PRINT_PROGRESS("Move %i system img files to system folder...", num_of_imgs);
 		for (i = 0; i < num_of_imgs; i++) {
 			char * file_name = entry_list[i]->d_name;
+			base_system_name = file_name;
 
-			PRINT_PROGRESS("   (%i/%i) moving %s", i+1, num_of_imgs, file_name);
+			found = base_system_name.rfind(".img");								// remove everything from and including .img
+			if (found != std::string::npos) base_system_name.erase(found);
+
+			found = base_system_name.find_last_not_of("0123456789");			// remove any trailing numerical chars (multi part img file)
+			if (found != std::string::npos) base_system_name.erase(found+1);
+
+			found = base_system_name.find_last_not_of("_");						// remove any other trailing chars we don't want
+			if (found != std::string::npos) base_system_name.erase(found+1);
+			//OR: if (base_system_name.back() == '_') base_system_name.pop_back();	// remove single trailing '_' (this needs c++11, so compile with -std=gnu++11)
+
+
+			full_path_to_outsystemimgs = path_base + "/" + path_outsystemimgs + "/" + base_system_name;
+
+			mkdir(full_path_to_outsystemimgs.c_str(), 0777);
+
+			PRINT_PROGRESS("   (%i/%i) moving %s to %s", i+1, num_of_imgs, file_name, base_system_name.c_str());
 			if ((res = move_file(file_name, ".", full_path_to_outsystemimgs.c_str())) != 0) {
 				PRINT_ERROR("could not move system img file (res=%i)", res);
 				exit_code = 3;
@@ -1726,7 +1755,7 @@ int MoveSystemIMGFiles(const char *path_inp_files, const char *path_outsystemimg
 	change_dir(path_base);
 
 	if (exit_code == 0)
-		PRINT_FINISHED("Successfully moved system img files to '%s'", path_outsystemimgs);
+		PRINT_FINISHED("Successfully moved system img files");
 
 
 	return exit_code;
@@ -2256,10 +2285,38 @@ int main(int argc, char **argv)
 		if (!create_firmware_only) {
 			if (exit_code == 0) exit_code = MoveSystemIMGFiles(OUT_FIRMWARE, TMP_DECRYPTED_SYSIMGS);
 
-			if (exit_code == 0) exit_code = CreateSystemIMG(TMP_DECRYPTED_SYSIMGS, OUT_SYSTEM"/system.img");
-			if ((exit_code == 0) && !keep_all_files) delete_dir_contents(TMP_DECRYPTED_SYSIMGS);
+			if (exit_code == 0) {
+				int i;
+				int num_of_sysimg_dirs;
+				struct dirent **entry_list;
 
-			if (exit_code == 0) exit_code = TestSystemIMG(OUT_SYSTEM"/system.img");
+				num_of_sysimg_dirs = scandir(TMP_DECRYPTED_SYSIMGS, &entry_list, select_dirs, versionsort);
+				if (is_scandir_error(entry_list, num_of_sysimg_dirs)) {
+					PRINT_ERROR("No system img directories found!");
+					exit_code = 2;
+				}
+				else {
+					for (i = 0; i < num_of_sysimg_dirs; i++) {
+						int exit_code_tmp = 0;
+						char * sysimg_name = entry_list[i]->d_name;
+
+						char in_dir[PATH_MAX];
+						char out_file[PATH_MAX];
+
+						sprintf(in_dir, "%s/%s", TMP_DECRYPTED_SYSIMGS, sysimg_name);
+						sprintf(out_file, "%s/%s%s", OUT_SYSTEM, sysimg_name, ".img");
+
+						if (exit_code_tmp == 0) exit_code_tmp = CreateSystemIMG(in_dir, out_file);
+						if ((exit_code_tmp == 0) && !keep_all_files) { delete_dir_contents(in_dir); remove(in_dir); }
+
+						if (exit_code_tmp == 0) exit_code_tmp = TestSystemIMG(out_file);
+
+						exit_code |= exit_code_tmp;
+					}
+					free_dirent_entry_list(entry_list, num_of_sysimg_dirs);
+				}
+				remove(TMP_DECRYPTED_SYSIMGS);
+			}
 
 			PRINT_TITLE("Adding boot.img to the system folder");
 			std::string path_bootimg_file = find_file_from_pattern(OUT_FIRMWARE, BOOTIMG);
