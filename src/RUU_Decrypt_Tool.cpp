@@ -121,24 +121,10 @@
 #define KEYFILE_SIZE 96
 
 
-// ==================================================================================
-// ----------------------------------------------------------------------------------
-// uncomment the below if you want to use system() call instead
-// of forking and executing the other binaries
-// (this works fine in linux, but breaks in cygwin, because i'm not including /bin/sh
-
-// #define USE_SYSTEM_CALL
-
-
-// ----------------------------------------------------------------------------------
 // MAX_EXEC_ARGS is the maximum number of arguments passed through exec() calls,
-// needs to accomodate the max number of args when using run_program
+// needs to accommodate the max number of args when using run_program
 // including the max system*.img* files
-#ifndef USE_SYSTEM_CALL
 #define MAX_EXEC_ARGS 60
-#endif
-// ----------------------------------------------------------------------------------
-// ==================================================================================
 
 
 #define UNIX
@@ -429,67 +415,8 @@ int check_magic(const char *file_name, int offset, const char *magic)
 }
 
 // =====================================================================
-// system calls
-// ** system_args / system() calls out to shell (/bin/sh)
-// ** which doesnt work well with cygwin
-// ** so instead we fork a new process and use exec()
-// ** unless USE_SYSTEM_CALL is defined
+// run external tools
 // ---------------------------------------------------------------------
-#ifdef USE_SYSTEM_CALL
-
-int system_args(const char *fmt, ...)
-{
-	int ret;
-	char cmd[512];
-	va_list ap;
-	va_start(ap, fmt);
-
-	// we're no longer adding our bin folder to PATH so prepend full_path_to_bins if needed
-	std::string full_path_to_bin_file = fmt;
-	std::string args = fmt;
-
-	if (full_path_to_bin_file.find_first_of(' ') == std::string::npos) {
-		full_path_to_bin_file = full_path_to_bins + "/" + full_path_to_bin_file; // no arguments
-		args = "";
-	}
-	else {
-		full_path_to_bin_file = full_path_to_bins + "/" + full_path_to_bin_file.substr(0, full_path_to_bin_file.find_first_of(' ')); // get the command only
-		args = args.substr(args.find_first_of(' '));
-	}
-
-
-	if (access(full_path_to_bin_file.c_str(), F_OK) == 0)
-		ret = vsnprintf(cmd, sizeof(cmd), ('"' + full_path_to_bin_file + '"' + args).c_str(), ap);
-	else
-		ret = vsnprintf(cmd, sizeof(cmd), fmt, ap);
-
-
-	if (print_debug_info) {
-		printf("[DBG] about to system(): '%s'\n\n", cmd);
-	}
-
-
-	if(ret < (int)sizeof(cmd))
-		ret = system(cmd);
-	else {
-		char *buff = new char[ret+1];
-
-		if (access(full_path_to_bin_file.c_str(), F_OK) == 0)
-			vsnprintf(buff, ret+1, ('"' + full_path_to_bin_file + '"' + args).c_str(), ap);
-		else
-			vsnprintf(buff, ret+1, fmt, ap);
-
-		ret = system(buff);
-
-		delete[] buff;
-	}
-	va_end(ap);
-
-	return ret;
-}
-
-#else
-
 int run_program(const char *bin_to_run, char *argv[])
 {
 	int exit_code;
@@ -599,7 +526,6 @@ int run_program(const char *bin_to_run, ...)
 
 	return run_program(bin_to_run, exec_args);
 }
-#endif // USE_SYSTEM_CALL
 // =====================================================================
 
 
@@ -797,27 +723,15 @@ int Test_KeyFile(const char *path_enczip, const char *path_keyfile)
 	int res;
 	int exit_code = 0;
 
-#ifdef USE_SYSTEM_CALL
-				if (ruuveal_device.empty())
-					res = system_args("ruuveal -K %s \"%s\" %s > /dev/null 2>&1", path_keyfile, path_enczip, "tmpzip.zip");
-				else
-					res = system_args("ruuveal --device %s \"%s\" %s > /dev/null 2>&1", ruuveal_device.c_str(), path_enczip, "tmpzip.zip");
-#else
-				// /dev/null 2>&1 redirection doesnt work this way in fork
-				if (ruuveal_device.empty())
-					res = run_program("ruuveal", "-K", path_keyfile, path_enczip, "tmpzip.zip", NULL);
-				else
-					res = run_program("ruuveal", "--device", ruuveal_device.c_str(), path_enczip, "tmpzip.zip", NULL);
-#endif
+	if (ruuveal_device.empty())
+		res = run_program("ruuveal", "-K", path_keyfile, path_enczip, "tmpzip.zip", NULL);
+	else
+		res = run_program("ruuveal", "--device", ruuveal_device.c_str(), path_enczip, "tmpzip.zip", NULL);
 
 	if (res == 0) {
 		// PRINT_PROGRESS("keyfile passed ruuveal, running 2nd test...");
 
-#ifdef USE_SYSTEM_CALL
-		res = system_args("unzip -t %s", "tmpzip.zip");
-#else
 		res = run_program("unzip", "-t", "tmpzip.zip", NULL);
-#endif
 
 		if (res != 0) {
 			// PRINT_PROGRESS("WARNING: keyfile did not create a proper zip (res=%i)!", res);
@@ -901,11 +815,7 @@ int Run_BRUUTVEAL(const char *path_hboot_file, const char *path_encrypted_zip_fi
 	}
 	else {
 
-#ifdef USE_SYSTEM_CALL
-		res = system_args("bruutveal \"%s\" \"%s\" \"%s\"", path_hboot_file, path_encrypted_zip_file, path_output_key_file);
-#else
 		res = run_program("bruutveal", path_hboot_file, path_encrypted_zip_file, path_output_key_file, NULL);
-#endif
 
 		if (res == 0) {
 			PRINT_PROGRESS("bruutveal keyfile has been successfully generated '%s'", path_output_key_file);
@@ -984,11 +894,7 @@ int KeyFinder_CheckInputFile(const char *full_path_encrypted_zip_file, const cha
 				exit_code = 5;
 			}
 			else {
-				#ifdef USE_SYSTEM_CALL
-				res = system_args(AIK_UNPACK" %s", "tmp_hosd");
-				#else
 				res = run_program(AIK_UNPACK, "tmp_hosd", NULL);
-				#endif
 
 				delete_file(aik_tmp_hosd.c_str());
 			}
@@ -996,12 +902,7 @@ int KeyFinder_CheckInputFile(const char *full_path_encrypted_zip_file, const cha
 		else // { // no brackets are needed since the next command is only one line, otherwise we'd need them!!
 #endif  //__CYGWIN__
 
-#ifdef USE_SYSTEM_CALL
-		res = system_args(AIK_UNPACK" \"%s\"", full_path_hboot_file);
-#else
 		res = run_program(AIK_UNPACK, full_path_hboot_file, NULL);
-#endif
-
 
 		if (res == 0) {
 			std::string downloadzip = full_path_to_bins + "/" + AIK_BASE + "/ramdisk/sbin/downloadzip";
@@ -1020,11 +921,7 @@ int KeyFinder_CheckInputFile(const char *full_path_encrypted_zip_file, const cha
 			exit_code = 4;
 		}
 
-#ifdef USE_SYSTEM_CALL
-		system_args(AIK_CLEANUP);
-#else
 		run_program(AIK_CLEANUP, NULL);
-#endif
 	}
 	else {
 		PRINT_PROGRESS("... assuming hboot...");
@@ -1123,11 +1020,7 @@ int KeyFinder_TryForceExtraction(const char *full_path_encrypted_zip_file, const
 			char * zip_file = entry_list[i]->d_name;
 
 			// disregard any errors
-#ifdef USE_SYSTEM_CALL
-			system_args("unzip -n \"%s\" %s %s -d %s", zip_file, "hboot*", "hosd*", "tmp");
-#else
 			run_program("unzip", "-n", zip_file, "hboot*", "hosd*", "-d", "tmp", NULL);
-#endif
 
 		}
 		free_dirent_entry_list(entry_list, num_of_zips);
@@ -1350,9 +1243,6 @@ int CreateSystemIMG(const char *path_inp_sysimgfiles, const char *path_output_sy
 			PRINT_PROGRESS("Sparse Image detected, using simg2img");
 			PRINT_PROGRESS("    Please be patient, this can take several minutes...");
 
-#ifdef USE_SYSTEM_CALL
-			res = system_args("simg2img %s \"%s\"", "system*", full_path_output_system_img_file.c_str());
-#else
 			// wildcards arent allowed in run_program
 			char * args[MAX_EXEC_ARGS];
 			for (i = 0; i < num_of_imgs; i++)
@@ -1360,7 +1250,6 @@ int CreateSystemIMG(const char *path_inp_sysimgfiles, const char *path_output_sy
 			args[i] = (char *)full_path_output_system_img_file.c_str();
 			args[i+1] = NULL;
 			res = run_program("simg2img", args);
-#endif
 
 			if (res != 0) {
 				PRINT_ERROR("could not create '%s' (err=%i)", path_output_system_img_file, res);
@@ -1407,11 +1296,7 @@ int TestSystemIMG(const char *path_systemimg_file)
 	int res;
 	int exit_code = 0;
 
-#ifdef USE_SYSTEM_CALL
-	res = system_args("e2fsck -fn \"%s\"", path_systemimg_file);
-#else
 	res = run_program("e2fsck", "-fn", path_systemimg_file, NULL);
-#endif
 
 	if (res != 0) {
 		PRINT_ERROR("'%s' is corrupt (err=%i)", path_systemimg_file, res);
@@ -1507,17 +1392,10 @@ int DecryptZIPs(const char *path_inp_dumpedzips, const char *path_out_decryptedz
 				// 2- encrypted but not signed
 				PRINT_PROGRESS("Encrypted zip detected, running ruuveal...");
 
-#ifdef USE_SYSTEM_CALL
-				if (ruuveal_device.empty())
-					res = system_args("ruuveal -K \"%s\" \"%s\" \"%s/dec_%s\"", full_path_key_file.c_str(), file_name, full_path_out_decryptedzips.c_str(), file_name);
-				else
-					res = system_args("ruuveal --device %s \"%s\" \"%s/dec_%s\"", ruuveal_device.c_str(), file_name, full_path_out_decryptedzips.c_str(), file_name);
-#else
 				if (ruuveal_device.empty())
 					res = run_program("ruuveal", "-K", full_path_key_file.c_str(), file_name, (full_path_out_decryptedzips + "/" + "dec_" + file_name).c_str(), NULL);
 				else
 					res = run_program("ruuveal", "--device", ruuveal_device.c_str(), file_name, (full_path_out_decryptedzips + "/" + "dec_" + file_name).c_str(), NULL);
-#endif
 
 				if (res != 0) {
 					PRINT_ERROR("could not decrypt file '%s' (res=%i)", file_name, res);
@@ -1541,11 +1419,7 @@ int DecryptZIPs(const char *path_inp_dumpedzips, const char *path_out_decryptedz
 					}
 					else {
 
-#ifdef USE_SYSTEM_CALL
-						res = system_args("unzip -q -t \"%s\"", output_file.c_str());
-#else
 						res = run_program("unzip", "-q", "-t", output_file.c_str(), NULL);
-#endif
 
 						if (res != 0) {
 							PRINT_ERROR("unencrypted+unsigned zip failed test (err=%i)", res);
@@ -1562,11 +1436,7 @@ int DecryptZIPs(const char *path_inp_dumpedzips, const char *path_out_decryptedz
 					// normal zip, no signature
 					PRINT_PROGRESS("    normal zip, testing...");
 
-#ifdef USE_SYSTEM_CALL
-					res = system_args("unzip -q -t \"%s\"", file_name);
-#else
 					res = run_program("unzip", "-q", "-t", file_name, NULL);
-#endif
 
 					if (res != 0) {
 						PRINT_ERROR("unencrypted zip failed test (err=%i)", res);
@@ -1649,21 +1519,13 @@ int UnzipDecryptedZIPs(const char *path_inp_zips, const char *path_outfiles)
 
 			PRINT_PROGRESS("\nUnzipping decrypted zip: (%i/%i) '%s'", i+1, num_of_zips, file_name);
 
-#ifdef USE_SYSTEM_CALL
-			if (create_system_only)
-				res = system_args("unzip -n \"%s\" \"%s\" \"%s\" -d \"%s\"", file_name, SYSTEMIMG, BOOTIMG, full_path_to_outfiles.c_str());
-			else if (create_firmware_only)
-				res = system_args("unzip -n \"%s\" -x \"%s\" -d \"%s\"", file_name, SYSTEMIMG, full_path_to_outfiles.c_str());
-			else
-				res = system_args("unzip -n \"%s\" -d \"%s\"", file_name, full_path_to_outfiles.c_str());
-#else
 			if (create_system_only)
 				res = run_program("unzip", "-n", file_name, SYSTEMIMG, BOOTIMG, "-d", full_path_to_outfiles.c_str(), NULL);
 			else if (create_firmware_only)
 				res = run_program("unzip", "-n", file_name, "-x", SYSTEMIMG, "-d", full_path_to_outfiles.c_str(), NULL);
 			else
 				res = run_program("unzip", "-n", file_name, "-d", full_path_to_outfiles.c_str(), NULL);
-#endif
+
 			// also disregard error 11 (no matched files, due to inclusion or exclusion)
 			if (res != 0 && res != 11) {
 				PRINT_ERROR("could not unzip file (res=%i)", res);
@@ -1812,11 +1674,7 @@ int ExtractZIPs(const char *path_to_ruu_file, const char *path_out)
 		// LargeZip Header
 		PRINT_PROGRESS("LargeZip format detected, using ruuveal");
 
-#ifdef USE_SYSTEM_CALL
-		res = system_args("ruuveal -D \"%s\" %s", full_path_to_ruu_file.c_str(), "dmp.zip");
-#else
 		res = run_program("ruuveal", "-D", full_path_to_ruu_file.c_str(), "dmp.zip", NULL);
-#endif
 
 		if (res != 0) {
 			PRINT_ERROR("ruuveal returned error, aborting (err=%i)", res);
@@ -1829,11 +1687,7 @@ int ExtractZIPs(const char *path_to_ruu_file, const char *path_out)
 		// possible TODO: check if that zip is actually an RUU, not just a regular zip
 		PRINT_PROGRESS("Normal Zip format detected, using unzip");
 
-#ifdef USE_SYSTEM_CALL
-		res = system_args("unzip \"%s\"", full_path_to_ruu_file.c_str());
-#else
 		res = run_program("unzip", full_path_to_ruu_file.c_str(), NULL);
-#endif
 
 		if (res != 0) {
 			PRINT_ERROR("unzip returned error, aborting (err=%i)", res);
@@ -1904,11 +1758,7 @@ int UnRUU(const char *path_ruu_exe_name, const char *path_out)
 	int exit_code = 0;
 	int res;
 
-#ifdef USE_SYSTEM_CALL
-	res = system_args("unruu \"%s\"", path_ruu_exe_name);
-#else
 	res = run_program("unruu", path_ruu_exe_name, NULL);
-#endif
 
 	if (res != 0) {
 		PRINT_ERROR("UnRUU failed");
@@ -2052,13 +1902,6 @@ int main(int argc, char **argv)
 		create_system_only = 0;
 		create_firmware_only = 0;
 	}
-
-#ifdef USE_SYSTEM_CALL
-	if (!system(NULL)) {
-		PRINT_ERROR("command processor is not available!");
-		return 2;
-	}
-#endif
 
 	std::string full_path_to_ruu_file;
 	std::string full_path_to_hb_file;
