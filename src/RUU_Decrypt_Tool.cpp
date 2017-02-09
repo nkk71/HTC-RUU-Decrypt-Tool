@@ -412,8 +412,11 @@ int main(int argc, char **argv)
 
 			PRINT_TITLE("Adding boot.img to the system folder");
 			std::string path_bootimg_file = find_file_from_pattern(OUT_FIRMWARE, BOOTIMG);
+			if (path_bootimg_file.empty())
+				path_bootimg_file = find_file_from_pattern(OUT_FIRMWARE, BOOTIMG_S);
+
 			if (path_bootimg_file.empty()) {
-				PRINT_ERROR("Couldn't find a %s to copy to system folder.", BOOTIMG);
+				PRINT_ERROR("Couldn't find a %s or %s to copy to system folder.", BOOTIMG, BOOTIMG_S);
 			}
 			else if (create_system_only) {
 				PRINT_PROGRESS("Moving %s to %s", path_bootimg_file.c_str(), OUT_SYSTEM"/boot.img");

@@ -31,7 +31,8 @@
 
 // zip extraction inclusion / exclusion
 #define SYSTEMIMG   "system*.img*"
-#define BOOTIMG     "boot*.img"
+#define BOOTIMG     "boot.img"
+#define BOOTIMG_S   "boot_*.img"
 
 
 std::string Find_First_Encrypted_ZIP(void);
