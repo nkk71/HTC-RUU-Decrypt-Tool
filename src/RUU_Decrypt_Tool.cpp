@@ -61,6 +61,7 @@ int create_system_only = 0;
 int create_firmware_only = 0;
 int create_sd_zip = 0;
 int print_debug_info = 0;
+int wait_for_enter = 0;
 std::string ruuveal_device;
 
 
@@ -74,6 +75,24 @@ void signal_Handler(int sig_num)
 	printf("\n\nE-SIGNAL received signal=%i, try moving back rom.zip to origin and exit\n\n", sig_num);
 	rename(signal_full_path_to_tmpzip.c_str(), signal_full_path_to_ruu_zip.c_str());
 	exit(sig_num);
+}
+
+
+void press_enter_to_exit(void)
+{
+#if defined(__CYGWIN__)
+	// For the Windows drag and droppers
+	// Not the nicest nor really reliable way to do it,
+	// but easy enough, considering ppid doesn't work.
+	// Maybe better to add a command line flag instead.
+	wait_for_enter = getenv("PROMPT") == NULL;
+#endif
+
+	if (wait_for_enter) {
+		int c;
+		PRINT_INFO("Press ENTER to exit");
+		while ((c = getchar()) != EOF && c != '\n');
+	}
 }
 
 
@@ -131,6 +150,7 @@ int main(int argc, char **argv)
 			}
 			else {
 				PRINT_ERROR("No DEVICE parameter specified for --device DEVICE option.");
+				press_enter_to_exit();
 				return 1;
 			}
 
@@ -151,6 +171,7 @@ int main(int argc, char **argv)
 					printf("* %s (%s)\n", ptr->desc, ptr->name);
 				}
 				printf("\n");
+				press_enter_to_exit();
 				return 1;
 			}
 		}
@@ -164,7 +185,7 @@ int main(int argc, char **argv)
 
 	if (path_ruuname.empty()) {
 		PRINT_INFO("");
-		PRINT_INFO("Usage:%s [options] <RUUName: RUU.exe or ROM.zip> [keyfile/hboot/hosd]", cmd_name.c_str());
+		PRINT_INFO("Usage: %s [options] <RUUName: RUU.exe or ROM.zip> [keyfile/hboot/hosd]", cmd_name.c_str());
 		PRINT_INFO("");
 		PRINT_INFO("   Optional arguments");
 		PRINT_INFO("      -s, --systemonly     only extract the system.img and boot.img (for ROM)");
@@ -182,6 +203,7 @@ int main(int argc, char **argv)
 		PRINT_INFO("                           please run unruu to see the list of DEVICEs supported");
 		PRINT_INFO("");
 		PRINT_INFO("");
+		press_enter_to_exit();
 		return 1;
 	}
 
@@ -202,6 +224,7 @@ int main(int argc, char **argv)
 
 		if (realpath(path_ruuname.c_str(), tmp_filename_buffer) == NULL) {
 			PRINT_ERROR("Couldn't resolve full path to file '%s'!", path_ruuname.c_str());
+			press_enter_to_exit();
 			return 2;
 		}
 		else
@@ -211,6 +234,7 @@ int main(int argc, char **argv)
 		if (!path_hb.empty()) {
 			if (realpath(path_hb.c_str(), tmp_filename_buffer) == NULL) {
 				PRINT_ERROR("Couldn't resolve full path to file '%s'!", path_hb.c_str());
+				press_enter_to_exit();
 				return 2;
 			}
 			else
@@ -221,6 +245,7 @@ int main(int argc, char **argv)
 	is_exe = 0;
 	if (access(full_path_to_ruu_file.c_str(), R_OK)) {
 		PRINT_ERROR("Couldn't read file '%s'!", full_path_to_ruu_file.c_str());
+		press_enter_to_exit();
 		return 2;
 	}
 	else if (check_magic(full_path_to_ruu_file.c_str(), 0, IMAGE_DOS_SIGNATURE)) {
@@ -239,6 +264,7 @@ int main(int argc, char **argv)
 		PRINT_PROGRESS("RUU identified as HTC Singed Encrypted Zip file");
 	else {
 		PRINT_ERROR("Couldn't identify '%s' file format!", path_ruuname.c_str());
+		press_enter_to_exit();
 		return 2;
 	}
 
@@ -258,6 +284,7 @@ int main(int argc, char **argv)
 		len = readlink("/proc/self/exe", full_path_to_self, sizeof(full_path_to_self));
 		if (len == -1) {
 			PRINT_ERROR("in readlink");
+			press_enter_to_exit();
 			return 2;
 		}
 		full_path_to_self[len] = '\x00'; // readlink does not null terminate!
@@ -303,6 +330,7 @@ int main(int argc, char **argv)
 	if (access(full_path_to_wrk.c_str(), F_OK) == 0) {
 		PRINT_INFO("");
 		PRINT_ERROR("OUT folder already exists ('%s')\n       please delete it, we don't want to accidentally overwrite something you need.\n\n", full_path_to_wrk.c_str());
+		press_enter_to_exit();
 		return 2;
 	}
 
@@ -323,6 +351,7 @@ int main(int argc, char **argv)
 
 	if (exit_code) {
 		PRINT_ERROR("Couldn't create [all] work folders, aborting!");
+		press_enter_to_exit();
 		return 2;
 	}
 
@@ -549,6 +578,8 @@ int main(int argc, char **argv)
 	PRINT_INFO("");
 
 	change_dir(path_cur.c_str());
+
+	press_enter_to_exit();
 
 	return exit_code;
 }
