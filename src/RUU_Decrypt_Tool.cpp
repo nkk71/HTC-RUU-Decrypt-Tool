@@ -428,8 +428,22 @@ int main(int argc, char **argv)
 			}
 		}
 
-		path_android_info_file = find_file_from_pattern(OUT_FIRMWARE, "*android-info*.txt*");
-		info = Parse_Android_Info(path_android_info_file.c_str());
+		PRINT_TITLE("Checking android-info.txt");
+		path_android_info_file = find_file_from_pattern(OUT_FIRMWARE, ANDROIDINFO);
+		if (!path_android_info_file.empty()) {
+			if (!info.modelid.empty() || !info.mainver.empty())
+				PRINT_INFO("Updating RUU Info from: %s", path_android_info_file.c_str());
+			else
+				PRINT_INFO("Information extracted from %s:", path_android_info_file.c_str());
+
+			info = Parse_Android_Info(path_android_info_file.c_str());
+			if (!info.modelid.empty()) PRINT_INFO("    INFO: RUU modelid: %s", info.modelid.c_str());
+			if (!info.mainver.empty()) PRINT_INFO("    INFO: RUU mainver: %s", info.mainver.c_str());
+		}
+		else if (!info.modelid.empty() || !info.mainver.empty())
+			PRINT_INFO("Couldn't find suitable android-info.txt file. Using previous info from RUU.EXE");
+		else
+			PRINT_INFO("Couldn't find suitable android-info.txt file. MID and RUU version are not known!");
 
 		PRINT_TITLE("Checking keyfile state");
 		if (ruuveal_device.empty()) {
@@ -502,6 +516,7 @@ int main(int argc, char **argv)
 	remove("tmp");
 	PRINT_INFO("");
 
+	PRINT_INFO("");
 	std::string full_path_to_final_out;
 	full_path_to_final_out = full_path_to_wrk;
 
@@ -515,13 +530,15 @@ int main(int argc, char **argv)
 	}
 	PRINT_INFO("");
 
-	if (access(full_path_to_final_out.c_str(), R_OK) == 0) {
-		PRINT_INFO("Folder '%s' already exists! Keeping files in OUT folder.", full_path_to_final_out.c_str());
-		PRINT_INFO("");
-		full_path_to_final_out = full_path_to_wrk;
+	if (full_path_to_wrk != full_path_to_final_out) {
+		if (access(full_path_to_final_out.c_str(), R_OK) == 0) {
+			PRINT_INFO("Folder '%s' already exists! Keeping files in OUT folder.", full_path_to_final_out.c_str());
+			PRINT_INFO("");
+			full_path_to_final_out = full_path_to_wrk;
+		}
+		else
+			rename(full_path_to_wrk.c_str(), full_path_to_final_out.c_str());
 	}
-	else
-		rename(full_path_to_wrk.c_str(), full_path_to_final_out.c_str());
 
 	//Finished:
 	if (exit_code == 0)

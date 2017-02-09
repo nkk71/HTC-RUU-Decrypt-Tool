@@ -31,6 +31,7 @@
 
 // zip extraction inclusion / exclusion
 #define SYSTEMIMG   "system*.img*"
+#define ANDROIDINFO "*android-info*.txt*"
 #define BOOTIMG     "boot.img"
 #define BOOTIMG_S   "boot_*.img"
 
