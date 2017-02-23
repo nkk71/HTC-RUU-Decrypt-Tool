@@ -97,18 +97,22 @@ int Check_If_New_Keyfile(const char *path_new_key_file, const char *full_path_ke
 		else {
 			for (i = 0; i < num_of_keys; i++) {
 				pFile = fopen(entry_list[i]->d_name, "rb" );
-				if (pFile == NULL)
+				if (pFile == NULL) {
 					exit_code = 6; // couldnt open file
+					PRINT_ERROR("Couldn't open '%s' (please check your keyfile folder for corrupt keyfiles)", entry_list[i]->d_name);
+				}
 				else {
-					if (fread(buffer_chk_key, 1, KEYFILE_SIZE, pFile) != KEYFILE_SIZE)
+					if (fread(buffer_chk_key, 1, KEYFILE_SIZE, pFile) != KEYFILE_SIZE) {
 						exit_code = 7; // couldnt read buffer
+						PRINT_ERROR("Couldn't read '%s' (please check your keyfile folder for corrupt keyfiles)", entry_list[i]->d_name);
+					}
 					else if (memcmp(buffer_new_key, buffer_chk_key, KEYFILE_SIZE) == 0)
-							exit_code = 0; // key already exists
+						exit_code = 0; // key already exists
 
 				fclose(pFile);
 				}
 
-				if (exit_code != 1)
+				if (exit_code == 0)
 					break;
 			}
 			free_dirent_entry_list(entry_list, num_of_keys);
