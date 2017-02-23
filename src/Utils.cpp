@@ -321,23 +321,23 @@ int run_program(const char *bin_to_run, char *argv[])
 
 		if (access(full_path_to_bin_file.c_str(), F_OK) == 0) {
 			if (print_debug_info) {
-				printf("[DBG] about to execv (run internal program): '%s'\n", bin_to_run);
+				PRINT_DBG("about to execve (run internal program): '%s'", bin_to_run);
 				i = 0;
 				while (exec_args[i] != NULL) {
-					printf("[DBG]    '%s'\n", exec_args[i++]);
+					PRINT_DBG("   '%s'", exec_args[i++]);
 				}
-				printf("\n");
+				PRINT_INFO("");
 			}
 			execv(full_path_to_bin_file.c_str(), exec_args); // our binaries
 		}
 		else {
 			if (print_debug_info) {
-				printf("[DBG] about to execvp (run system program): '%s'\n", bin_to_run);
+				PRINT_DBG("about to execvp (run system program): '%s'", bin_to_run);
 				i = 0;
 				while (exec_args[i] != NULL) {
-					printf("[DBG]    '%s'\n", exec_args[i++]);
+					PRINT_DBG("   '%s'", exec_args[i++]);
 				}
-				printf("\n");
+				PRINT_INFO("");
 			}
 			execvp(bin_to_run, exec_args); // OS provided binaries
 		}
@@ -345,15 +345,15 @@ int run_program(const char *bin_to_run, char *argv[])
 		// we should not get here unless an error in exec() occurred
 		PRINT_ERROR("something went wrong with exec() (errno=%i '%s')!", errno, strerror(errno));
 		if (access(full_path_to_bin_file.c_str(), F_OK) == 0)
-			printf("offending execv: '%s'", full_path_to_bin_file.c_str());
+			PRINT_INFO("offending execve: '%s'", full_path_to_bin_file.c_str());
 		else
-			printf("offending execvp: '%s'", bin_to_run);
+			PRINT_INFO("offending execvp: '%s'", bin_to_run);
 
 		i = 0;
 		while (exec_args[i] != NULL) {
-			printf(" '%s'", exec_args[i++]);
+			PRINT_INFO(" '%s'", exec_args[i++]);
 		}
-		printf("\n");
+		PRINT_INFO("");
 
 		// this is not working as intended: raise(SIGINT); // abort program
 

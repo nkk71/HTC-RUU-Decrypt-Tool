@@ -166,11 +166,11 @@ int main(int argc, char **argv)
 
 			if (!supported) {
 				PRINT_ERROR("Incorrect parameter for --device: '%s' is not supported.", ruuveal_device.c_str());
-				printf("supported devices:-\n\n");
+				PRINT_INFO("supported devices:-\n");
 				for(ptr = htc_get_devices(); *ptr->name; ptr++) {
-					printf("* %s (%s)\n", ptr->desc, ptr->name);
+					PRINT_INFO("* %s (%s)", ptr->desc, ptr->name);
 				}
-				printf("\n");
+				PRINT_INFO("");
 				press_enter_to_exit();
 				return 1;
 			}
@@ -290,7 +290,7 @@ int main(int argc, char **argv)
 		full_path_to_self[len] = '\x00'; // readlink does not null terminate!
 
 		if (print_debug_info) {
-			printf("[DBG] full_path_to_self='%s'\n", full_path_to_self);
+			PRINT_DBG("full_path_to_self='%s'", full_path_to_self);
 		}
 
 		full_path_to_maindir = full_path_to_self;
@@ -315,14 +315,15 @@ int main(int argc, char **argv)
 	full_path_to_wrk = full_path_to_wrk.substr(0, full_path_to_wrk.find_last_of('/')) + "/" + OUT_MAIN;
 
 	if (print_debug_info) {
-		printf("[DBG] full_path_to_maindir='%s'\n", full_path_to_maindir.c_str());
-		printf("[DBG] full_path_to_keys='%s'\n", full_path_to_keys.c_str());
-		printf("[DBG] full_path_to_bins'%s'\n", full_path_to_bins.c_str());
-		printf("[DBG] full_path_to_wrk'%s'\n", full_path_to_wrk.c_str());
-		printf("[DBG] full_path_to_ruu_file='%s'\n", full_path_to_ruu_file.c_str());
-		printf("[DBG] full_path_to_hb_file='%s'\n", full_path_to_hb_file.c_str());
-		printf("[DBG] PATH='%s'\n", getenv("PATH"));
-		printf("\n\n");
+		PRINT_DBG("full_path_to_maindir='%s'", full_path_to_maindir.c_str());
+		PRINT_DBG("full_path_to_keys='%s'", full_path_to_keys.c_str());
+		PRINT_DBG("full_path_to_bins'%s'", full_path_to_bins.c_str());
+		PRINT_DBG("full_path_to_wrk'%s'", full_path_to_wrk.c_str());
+		PRINT_DBG("full_path_to_ruu_file='%s'", full_path_to_ruu_file.c_str());
+		PRINT_DBG("full_path_to_hb_file='%s'", full_path_to_hb_file.c_str());
+		PRINT_DBG("PATH='%s'", getenv("PATH"));
+		PRINT_INFO("");
+		PRINT_INFO("");
 	}
 
 	// all operations are going to be based in the wrk folder

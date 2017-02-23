@@ -283,7 +283,7 @@ int KeyFinder_CheckInputFile(const char *full_path_encrypted_zip_file, const cha
 			std::string aik_tmp_hosd = full_path_to_bins + "/" + AIK_BASE + "/" + "tmp_hosd";
 
 			if (print_debug_info)
-				printf("[DBG] the Tool path and the RUU path contain spaces; temporarily copy hosd file into the AIK folder\n\n");
+				PRINT_DBG("the Tool path and the RUU path contain spaces; temporarily copy hosd file into the AIK folder");
 
 			if (copy_file(full_path_hboot_file, aik_tmp_hosd.c_str()) != 0) {
 				PRINT_ERROR("the Tool path and the RUU path contain spaces; temporarily copy hosd file into the AIK folder failed!");

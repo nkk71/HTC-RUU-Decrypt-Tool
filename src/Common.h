@@ -47,6 +47,7 @@
 // printf macros
 // ---------------------------------------------------------------------
 #define PRINT_INFO(format, ...)			printf(format "\n", ##__VA_ARGS__)
+#define PRINT_DBG(format, ...)			printf("[DBG] " format "\n", ##__VA_ARGS__)
 
 #define PRINT_TITLE(format, ...)		printf("\n\n" BLUE BLDUND format NOCOLOR "\n", ##__VA_ARGS__)
 #define PRINT_PROGRESS(format, ...)		printf(BLUE format NOCOLOR "\n", ##__VA_ARGS__)
