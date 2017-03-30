@@ -25,6 +25,7 @@
 #include <stdio.h>
 
 #include <string>
+#include <sstream> // for std::stringstream
 
 #define UNIX
 
@@ -46,13 +47,13 @@
 // =====================================================================
 // printf macros
 // ---------------------------------------------------------------------
-#define PRINT_INFO(format, ...)			printf(format "\n", ##__VA_ARGS__)
-#define PRINT_DBG(format, ...)			printf("[DBG] " format "\n", ##__VA_ARGS__)
+#define PRINT_INFO(format, ...)      do { printf(format "\n", ##__VA_ARGS__); if (create_log_file) {char b[128]; snprintf(b, 128, format "\n", ##__VA_ARGS__); log_stream << b;} } while (0)
+#define PRINT_DBG(format, ...)       do { fprintf(stderr, "DBG " format "\n", ##__VA_ARGS__); if (create_log_file) {char b[128]; snprintf(b, 128, "DBG " format "\n", ##__VA_ARGS__); log_stream << b;} } while (0)
 
-#define PRINT_TITLE(format, ...)		printf("\n\n" BLUE BLDUND format NOCOLOR "\n", ##__VA_ARGS__)
-#define PRINT_PROGRESS(format, ...)		printf(BLUE format NOCOLOR "\n", ##__VA_ARGS__)
-#define PRINT_ERROR(format, ...)		printf(RED "ERROR: " format NOCOLOR "\n", ##__VA_ARGS__)
-#define PRINT_FINISHED(format, ...)		printf(BLUE "Finished: " format NOCOLOR "\n", ##__VA_ARGS__)
+#define PRINT_TITLE(format, ...)     do { printf("\n\n" BLUE BLDUND format NOCOLOR "\n", ##__VA_ARGS__); if (create_log_file) {char b[128]; snprintf(b, 128, "\n\n" format "\n", ##__VA_ARGS__); log_stream << b;} } while (0)
+#define PRINT_PROGRESS(format, ...)  do { printf(BLUE format NOCOLOR "\n", ##__VA_ARGS__); if (create_log_file) {char b[128]; snprintf(b, 128, format "\n", ##__VA_ARGS__); log_stream << b;} } while (0)
+#define PRINT_ERROR(format, ...)     do { printf(RED "ERROR: " format NOCOLOR "\n", ##__VA_ARGS__); if (create_log_file) {char b[128]; snprintf(b, 128, "ERROR: " format "\n", ##__VA_ARGS__); log_stream << b;} } while (0)
+#define PRINT_FINISHED(format, ...)  do { printf(BLUE "Finished: " format NOCOLOR "\n", ##__VA_ARGS__); if (create_log_file) {char b[128]; snprintf(b, 128, "Finished: " format "\n", ##__VA_ARGS__); log_stream << b;} } while (0)
 // =====================================================================
 
 
@@ -62,6 +63,7 @@ extern std::string full_path_to_maindir;
 extern std::string full_path_to_keys;
 extern std::string full_path_to_bins;
 extern std::string full_path_to_wrk;
+extern std::stringstream log_stream;
 
 // program flags
 extern int keep_all_files;
@@ -71,5 +73,6 @@ extern int create_firmware_only;
 extern int create_sd_zip;
 extern int print_debug_info;
 extern std::string ruuveal_device;
+extern int create_log_file;
 
 #endif // _COMMON_H

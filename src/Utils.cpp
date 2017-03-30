@@ -32,6 +32,7 @@
 #include <string>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 
 #if defined(__CYGWIN__)
 	#include <sys/cygwin.h>
@@ -286,9 +287,44 @@ int check_magic(const char *file_name, int offset, const char *magic)
 // =====================================================================
 // run external tools
 // ---------------------------------------------------------------------
+int clean_buffer(char *buffer)
+{
+	int buffer_length = strlen(buffer);
+	int first_r=0;
+	int last_r=0;
+	int i;
+	for (i = 0; i < buffer_length; i++) {
+		if (buffer[i] == '\r') {
+			first_r = i;
+			break;
+		}
+	}
+	for (i = buffer_length-1; i > 0; i--) {
+		if (buffer[i] == '\r') {
+			last_r = i;
+			break;
+		}
+	}
+	if (last_r > first_r) {
+		memmove(buffer+first_r, buffer+last_r, buffer_length-last_r+1);
+		return 1;
+	}
+	return 0;
+}
+
 int run_program(const char *bin_to_run, char *argv[])
 {
 	int exit_code;
+	int pipe_fd[2];
+	int log_child = create_log_file;
+
+	if (log_child) {
+		fflush(stdout); fflush(stderr);
+		if (pipe(pipe_fd)) {
+			PRINT_ERROR("pipe() error!");
+			log_child = 0;
+		}
+	}
 
 	pid_t child_pid = fork();
 
@@ -319,30 +355,43 @@ int run_program(const char *bin_to_run, char *argv[])
 			} while (exec_args[i-1] != NULL);
 		}
 
+		if (log_child) {
+			fflush(stdout); fflush(stderr);
+			close(pipe_fd[0]);              // close unused read end
+			dup2(pipe_fd[1],STDOUT_FILENO); // redirect stdout and stderr
+			dup2(pipe_fd[1],STDERR_FILENO);
+			close(pipe_fd[1]);
+		}
+
 		if (access(full_path_to_bin_file.c_str(), F_OK) == 0) {
 			if (print_debug_info) {
-				PRINT_DBG("about to execve (run internal program): '%s'", bin_to_run);
+				std::cout << "DBG about to execve (run internal program): '" << bin_to_run << "'" << std::endl;
 				i = 0;
 				while (exec_args[i] != NULL) {
-					PRINT_DBG("   '%s'", exec_args[i++]);
+					std::cout << "DBG    '" << exec_args[i++] << "'" << std::endl;
 				}
-				PRINT_INFO("");
+				std::cout << std::endl;
+				std::cout.flush();
 			}
 			execv(full_path_to_bin_file.c_str(), exec_args); // our binaries
 		}
 		else {
 			if (print_debug_info) {
-				PRINT_DBG("about to execvp (run system program): '%s'", bin_to_run);
+				std::cout << "DBG about to execvp (run system program): '" << bin_to_run << "'" << std::endl;
 				i = 0;
 				while (exec_args[i] != NULL) {
-					PRINT_DBG("   '%s'", exec_args[i++]);
+					std::cout << "DBG    '" << exec_args[i++] << "'" << std::endl;
 				}
-				PRINT_INFO("");
+				std::cout << std::endl;
+				std::cout.flush();
 			}
 			execvp(bin_to_run, exec_args); // OS provided binaries
 		}
 
 		// we should not get here unless an error in exec() occurred
+		if (log_child)
+			close(pipe_fd[0]);
+
 		PRINT_ERROR("something went wrong with exec() (errno=%i '%s')!", errno, strerror(errno));
 		if (access(full_path_to_bin_file.c_str(), F_OK) == 0)
 			PRINT_INFO("offending execve: '%s'", full_path_to_bin_file.c_str());
@@ -363,7 +412,59 @@ int run_program(const char *bin_to_run, char *argv[])
 
 	// now wait for child to exit an return code
 	int status;
-	waitpid(child_pid, &status, 0); //?? while (waitpid(-1, &status, 0) != child_pid);
+
+	if (log_child) {
+		close(pipe_fd[1]); // close unused write end
+		int ch;
+		int last_eol = 0;
+		char buffer[1024];
+		unsigned int buffer_count = 0;
+		unsigned int last_eol_pos = 0;
+
+		while(read(pipe_fd[0], &ch, 1) > 0) {
+			putchar(ch);
+
+			// ruuveal:   printf("Processing ZIP... %d/%d\r", pos, size);
+			// bruutveal: printf("\rBrute-forcing key[loop %d]: %d/%d...\r",
+			if (ch == '\r' && last_eol == '\r') {
+				buffer_count = last_eol_pos;
+				continue;
+			} else if (ch == '\n' || ch == '\r') {
+				fflush(stdout); fflush(stderr);
+				last_eol = ch;
+				if (ch == '\r') {
+					last_eol_pos = buffer_count;
+					ch = '\n';
+				}
+			}
+
+			buffer[buffer_count++] = ch;
+			if (buffer_count >= sizeof(buffer)-1) {
+				buffer[buffer_count] = '\x00';
+				// for some reason the ch=='\r' doesn't always get picked up
+				// properly during the run, so clean the buffer prior to flushing
+				if (clean_buffer(buffer)) {
+					buffer_count = strlen(buffer);
+				}
+				else {
+					log_stream << buffer;
+					buffer_count = 0;
+				}
+			}
+		}
+
+		if (buffer_count > 0) {
+			buffer[buffer_count] = '\x00';
+			clean_buffer(buffer);
+			log_stream << buffer;
+			buffer_count = 0;
+		}
+
+		fflush(stdout); fflush(stderr);
+		close(pipe_fd[0]);
+	}
+
+	waitpid(child_pid, &status, 0);
 	if (WIFEXITED(status)) {
 		// child exited normally, get return value
 		WEXITSTATUS(status);

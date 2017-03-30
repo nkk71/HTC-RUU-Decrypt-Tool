@@ -28,6 +28,9 @@
 #include <signal.h>
 
 #include <string>
+#include <iostream> // for std::cout
+#include <fstream> // for std::ofstream
+#include <sstream> // for std::stringstream
 
 #if defined( __APPLE__)
 	// mac specific header
@@ -53,6 +56,7 @@ std::string full_path_to_maindir;
 std::string full_path_to_keys;
 std::string full_path_to_bins;
 std::string full_path_to_wrk;
+std::stringstream log_stream;
 
 // program flags
 int keep_all_files = 0;
@@ -63,7 +67,7 @@ int create_sd_zip = 0;
 int print_debug_info = 0;
 int wait_for_enter = 0;
 std::string ruuveal_device;
-
+int create_log_file = 0;
 
 // needed for signal handling, so we dont loose tmp/romzip/rom.zip if it was a rom.zip on an abort
 std::string signal_full_path_to_tmpzip;
@@ -98,6 +102,8 @@ void press_enter_to_exit(void)
 
 int main(int argc, char **argv)
 {
+	create_log_file = 1;
+
 	PRINT_TITLE("+++ Welcome to the HTC RUU Decryption Tool %s +++", VERSION_STRING);
 	PRINT_INFO ("        by  nkk71  and  Captain_Throwback        ");
 	PRINT_INFO ("          Mac OS X support by topjohnwu          ");
@@ -151,6 +157,7 @@ int main(int argc, char **argv)
 			else {
 				PRINT_ERROR("No DEVICE parameter specified for --device DEVICE option.");
 				press_enter_to_exit();
+				write_log_file();
 				return 1;
 			}
 
@@ -172,6 +179,7 @@ int main(int argc, char **argv)
 				}
 				PRINT_INFO("");
 				press_enter_to_exit();
+				write_log_file();
 				return 1;
 			}
 		}
@@ -204,6 +212,7 @@ int main(int argc, char **argv)
 		PRINT_INFO("");
 		PRINT_INFO("");
 		press_enter_to_exit();
+		write_log_file();
 		return 1;
 	}
 
@@ -225,6 +234,7 @@ int main(int argc, char **argv)
 		if (realpath(path_ruuname.c_str(), tmp_filename_buffer) == NULL) {
 			PRINT_ERROR("Couldn't resolve full path to file '%s'!", path_ruuname.c_str());
 			press_enter_to_exit();
+			write_log_file();
 			return 2;
 		}
 		else
@@ -235,6 +245,7 @@ int main(int argc, char **argv)
 			if (realpath(path_hb.c_str(), tmp_filename_buffer) == NULL) {
 				PRINT_ERROR("Couldn't resolve full path to file '%s'!", path_hb.c_str());
 				press_enter_to_exit();
+				write_log_file();
 				return 2;
 			}
 			else
@@ -246,6 +257,7 @@ int main(int argc, char **argv)
 	if (access(full_path_to_ruu_file.c_str(), R_OK)) {
 		PRINT_ERROR("Couldn't read file '%s'!", full_path_to_ruu_file.c_str());
 		press_enter_to_exit();
+		write_log_file();
 		return 2;
 	}
 	else if (check_magic(full_path_to_ruu_file.c_str(), 0, IMAGE_DOS_SIGNATURE)) {
@@ -265,6 +277,7 @@ int main(int argc, char **argv)
 	else {
 		PRINT_ERROR("Couldn't identify '%s' file format!", path_ruuname.c_str());
 		press_enter_to_exit();
+		write_log_file();
 		return 2;
 	}
 
@@ -285,6 +298,7 @@ int main(int argc, char **argv)
 		if (len == -1) {
 			PRINT_ERROR("in readlink");
 			press_enter_to_exit();
+			write_log_file();
 			return 2;
 		}
 		full_path_to_self[len] = '\x00'; // readlink does not null terminate!
@@ -332,6 +346,7 @@ int main(int argc, char **argv)
 		PRINT_INFO("");
 		PRINT_ERROR("OUT folder already exists ('%s')\n       please delete it, we don't want to accidentally overwrite something you need.\n\n", full_path_to_wrk.c_str());
 		press_enter_to_exit();
+		write_log_file();
 		return 2;
 	}
 
@@ -353,6 +368,7 @@ int main(int argc, char **argv)
 	if (exit_code) {
 		PRINT_ERROR("Couldn't create [all] work folders, aborting!");
 		press_enter_to_exit();
+		write_log_file();
 		return 2;
 	}
 
@@ -577,6 +593,8 @@ int main(int argc, char **argv)
 		PRINT_FINISHED("Tool has finished but there was an error, please\n          check the console output and your OUT folder\n             '%s'", full_path_to_final_out.c_str());
 
 	PRINT_INFO("");
+
+	write_log_file("RUU_Decrypt_LOG-" + info.modelid + "_" + info.mainver + ".txt");
 
 	change_dir(path_cur.c_str());
 
