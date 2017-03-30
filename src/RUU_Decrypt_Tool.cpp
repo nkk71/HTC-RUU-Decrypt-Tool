@@ -73,6 +73,22 @@ int create_log_file = 0;
 std::string signal_full_path_to_tmpzip;
 std::string signal_full_path_to_ruu_zip;
 
+
+void write_log_file(std::string filename = "")
+{
+	if (filename.empty())
+		return;
+
+	std::cout << "Writing logfile to: " << get_absolute_cwd() << "/" << filename << std::endl;
+
+	std::ofstream log_file(filename.c_str(), std::ofstream::out);
+	if (log_file.is_open()) {
+		log_file << log_stream.str() << std::endl;
+		log_file.close();
+	}
+}
+
+
 // interrupt handler in case we need to move the original rom.zip back to origin
 void signal_Handler(int sig_num)
 {
