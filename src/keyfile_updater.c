@@ -373,7 +373,9 @@ int upload_files(const char *path_keyfile)
 		closedir(dp);
 
 		if (err)
-			count = -1 - count;
+			ret = -1;
+		else
+			ret = 0;
 	}
 
 	curl_easy_cleanup(curl);
