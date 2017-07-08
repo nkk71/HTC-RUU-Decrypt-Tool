@@ -44,6 +44,7 @@
 #include "Key_Finder.h"
 #include "Zip_Handler.h"
 #include "RUU_Functions.h"
+#include "Updater.h"
 
 #include "RUU_Decrypt_Tool.h"
 
@@ -67,6 +68,8 @@ int create_firmware_only = 0;
 int create_sd_zip = 0;
 int print_debug_info = 0;
 int wait_for_enter = 0;
+int allow_download = 0;
+int allow_upload = 0;
 std::string ruuveal_device;
 int create_log_file = 0;
 
@@ -309,6 +312,13 @@ int main(int argc, char **argv)
 	full_path_to_keys = full_path_to_maindir + "/" + "keyfiles";
 	mkdir(full_path_to_keys.c_str(), 0777);
 
+	if (path_ruuname.empty() && allow_download && allow_upload) {
+		// Sync only option
+		Sync_Keyfiles(full_path_to_keys.c_str());
+		write_log_file();
+		return 0;
+	}
+
 	std::string full_path_to_ruu_file;
 	std::string full_path_to_hb_file;
 	{
@@ -418,6 +428,10 @@ int main(int argc, char **argv)
 	signal_full_path_to_ruu_zip = full_path_to_ruu_file;
 	signal(SIGINT , signal_Handler);     // handle CTRL+C  //   2  /* Interrupt (ANSI).  */
 	signal(SIGTSTP, signal_Handler);     // handle CTRL+Z  //  20  /* Keyboard stop (POSIX).  */
+
+
+	if (allow_download)
+		Download_Keyfiles(full_path_to_keys.c_str());
 
 	std::string path_android_info_file;
 	android_info info;
@@ -553,10 +567,20 @@ int main(int argc, char **argv)
 
 					PRINT_INFO("");
 					PRINT_INFO("INFO: the keyfile '%s' generated appears to be new,", path_keyfile_file.c_str());
-					PRINT_INFO("      please consider sharing/uploading it, so it can be included in future");
-					PRINT_INFO("      releases of this tool, at:");
-					PRINT_INFO("http://forum.xda-developers.com/chef-central/android/tool-universal-htc-ruu-rom-decryption-t3382928");
-					PRINT_INFO("");
+
+					int keyfile_uploaded = 0;
+					if (!allow_upload)
+						PRINT_INFO("      You have opted to disable keyfile uploads ");
+					else if (Upload_Keyfile(path_keyfile_file.c_str()) == 0)
+						keyfile_uploaded = 1;
+
+					if (!keyfile_uploaded) {
+						PRINT_INFO("      please consider sharing/uploading it, so it can be included in future");
+						PRINT_INFO("      releases of this tool, at:");
+						PRINT_INFO("http://forum.xda-developers.com/chef-central/android/tool-universal-htc-ruu-rom-decryption-t3382928");
+						PRINT_INFO("");
+						PRINT_INFO("Or run the tool with the '--sync-keyfiles' option");
+					}
 				}
 			}
 			else
