@@ -267,6 +267,48 @@ int main(int argc, char **argv)
 		create_firmware_only = 0;
 	}
 
+	// setup global paths
+	{
+#if defined(__APPLE__)
+		char path[1024];
+		uint32_t size = sizeof(path);
+		_NSGetExecutablePath(path, &size);
+		full_path_to_maindir = path;
+		full_path_to_maindir = full_path_to_maindir.substr(0, full_path_to_maindir.find_last_of(".") - 1);
+#else
+		char full_path_to_self[PATH_MAX];
+		ssize_t len;
+
+		//realpath("/proc/self/exe", tst);
+		len = readlink("/proc/self/exe", full_path_to_self, sizeof(full_path_to_self));
+		if (len == -1) {
+			PRINT_ERROR("in readlink");
+			press_enter_to_exit();
+			write_log_file();
+			return 2;
+		}
+		full_path_to_self[len] = '\x00'; // readlink does not null terminate!
+
+		if (print_debug_info) {
+			PRINT_DBG("full_path_to_self='%s'", full_path_to_self);
+		}
+
+		full_path_to_maindir = full_path_to_self;
+		full_path_to_maindir = full_path_to_maindir.substr(0, full_path_to_maindir.find_last_of('/'));
+#endif
+
+#if defined(__CYGWIN__)
+		full_path_to_bins = full_path_to_maindir + "/" + "bin";
+#else
+		full_path_to_bins = convert_to_absolute_path(full_path_to_maindir) + "/" + "bin";
+#endif
+
+		full_path_to_maindir = convert_to_absolute_path(full_path_to_maindir);
+	}
+
+	full_path_to_keys = full_path_to_maindir + "/" + "keyfiles";
+	mkdir(full_path_to_keys.c_str(), 0777);
+
 	std::string full_path_to_ruu_file;
 	std::string full_path_to_hb_file;
 	{
@@ -321,48 +363,6 @@ int main(int argc, char **argv)
 		write_log_file();
 		return 2;
 	}
-
-	// setup global paths
-	{
-#if defined(__APPLE__)
-		char path[1024];
-		uint32_t size = sizeof(path);
-		_NSGetExecutablePath(path, &size);
-		full_path_to_maindir = path;
-		full_path_to_maindir = full_path_to_maindir.substr(0, full_path_to_maindir.find_last_of(".") - 1);
-#else
-		char full_path_to_self[PATH_MAX];
-		ssize_t len;
-
-		//realpath("/proc/self/exe", tst);
-		len = readlink("/proc/self/exe", full_path_to_self, sizeof(full_path_to_self));
-		if (len == -1) {
-			PRINT_ERROR("in readlink");
-			press_enter_to_exit();
-			write_log_file();
-			return 2;
-		}
-		full_path_to_self[len] = '\x00'; // readlink does not null terminate!
-
-		if (print_debug_info) {
-			PRINT_DBG("full_path_to_self='%s'", full_path_to_self);
-		}
-
-		full_path_to_maindir = full_path_to_self;
-		full_path_to_maindir = full_path_to_maindir.substr(0, full_path_to_maindir.find_last_of('/'));
-#endif
-
-#if defined(__CYGWIN__)
-		full_path_to_bins = full_path_to_maindir + "/" + "bin";
-#else
-		full_path_to_bins = convert_to_absolute_path(full_path_to_maindir) + "/" + "bin";
-#endif
-
-		full_path_to_maindir = convert_to_absolute_path(full_path_to_maindir);
-	}
-
-	full_path_to_keys = full_path_to_maindir + "/" + "keyfiles";
-
 
 	// deprecated: full_path_to_wrk  = full_path_to_maindir + "/" + OUT_MAIN;
 	// instead, we're going to run in the same place the RUU file is
