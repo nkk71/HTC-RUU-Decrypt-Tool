@@ -623,8 +623,11 @@ int main(int argc, char **argv)
 			PRINT_INFO("");
 			full_path_to_final_out = full_path_to_wrk;
 		}
-		else
-			rename(full_path_to_wrk.c_str(), full_path_to_final_out.c_str());
+		else if (rename(full_path_to_wrk.c_str(), full_path_to_final_out.c_str())) {
+			PRINT_INFO("Failed to rename '%s' to '%s' (%s) !", full_path_to_wrk.c_str(), full_path_to_final_out.c_str(), strerror(errno));
+			PRINT_INFO("");
+			full_path_to_final_out = full_path_to_wrk;
+		}
 	}
 
 	//Finished:
