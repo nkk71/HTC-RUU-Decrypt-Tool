@@ -27,6 +27,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <errno.h>
+#include <getopt.h>
 
 #include <string>
 #include <iostream> // for std::cout
@@ -92,7 +93,7 @@ void write_log_file(std::string filename = "")
 		log_file.close();
 	}
 	else {
-		std::cout << "Error writing logfile (" << strerror(errno) ")!" << std::endl;
+		std::cout << "Error writing logfile (" << strerror(errno) << ")!" << std::endl;
 	}
 }
 
@@ -193,131 +194,217 @@ void press_enter_to_exit(void)
 	}
 }
 
+void Print_Usage(std::string ProgramName)
+{
+	PRINT_INFO("");
+	PRINT_INFO("Usage: %s [options] <RUUName: RUU.exe or ROM.zip> [keyfile/hboot/hosd]", ProgramName.c_str());
+	PRINT_INFO("");
+	PRINT_INFO("   If none of the required arguments are supplied a simple Yes/No interface will be presented.");
+	PRINT_INFO("");
+	PRINT_INFO("   Required arguments (and/or):");
+	PRINT_INFO("      -s, --system     extract the system.img and boot.img (for ROM)");
+	PRINT_INFO("      -f, --firmware   extract the firmware files");
+	PRINT_INFO("      -z, --sdruuzip   copy and rename rom.zip for SD-Card flashing");
+	PRINT_INFO("                       Note: this will create a duplicate if the input is already a rom.zip");
+	PRINT_INFO("");
+	PRINT_INFO("   Keyfile Updater arguments:");
+	PRINT_INFO("      -o, --offline     disable down/upload of keyfiles");
+	PRINT_INFO("      --no-upload       do not upload if a new keyfile is generated");
+	PRINT_INFO("      --sync-keyfiles   sync entire keyfile folder (download & upload)");
+	PRINT_INFO("                        when used without a RUU the tool will only synchronize the");
+	PRINT_INFO("                        keyfiles, otherwise it will download new keyfiles before decrypting");
+	PRINT_INFO("                        and upload only if a new keyfile is generated");
+	PRINT_INFO("");
+	PRINT_INFO("   Logging:");
+	PRINT_INFO("      -L, --log [filename]   log all output to a txt file");
+	PRINT_INFO("                             'filename' is optional, the default would be:");
+	PRINT_INFO("                             RUU_Decrypt_LOG-{MID}_{MAINVER}.txt in the OUT folder");
+	PRINT_INFO("");
+	PRINT_INFO("   Debugging Options (not usually needed):");
+	PRINT_INFO("      -k, --keepall          keep all intermediary files");
+	PRINT_INFO("      -c, --slowcleanup      do a 'slow cleanup', ie dont delete files once partially processed");
+	PRINT_INFO("      -P, --debuginfo        print debug info (paths and exec)");
+	PRINT_INFO("");
+	PRINT_INFO("   Direct ruuveal support (needed for older devices):");
+	PRINT_INFO("      -d, --device DEVICE  specify device (this is only needed for old unruu supported devices)");
+	PRINT_INFO("                           please run ruuveal to see the list of DEVICEs supported");
+	PRINT_INFO("");
+	PRINT_INFO("");
+}
+
+int Parse_CommandLine(int argc, char **argv, std::string &path_ruuname, std::string &path_hb)
+{
+	struct option longopts[] = {
+		// Main Options
+		{ "system",   no_argument, NULL, 's' },
+		{ "firmware", no_argument, NULL, 'f' },
+		{ "sdruuzip", no_argument, NULL, 'z' },
+
+		// keyfile updater
+		{ "offline",       no_argument, NULL, 'o' },
+		{ "no-upload",     no_argument, NULL, 'N' },  // 'N' and 'S' are used for simplicity, that may be changed
+		{ "sync-keyfiles", no_argument, NULL, 'S' },  // in the future, so only the long options should be used !
+
+		// Logging
+		{ "log", optional_argument, NULL, 'L' },
+
+		// Debugging Options
+		{ "keepall",     no_argument, NULL, 'k' },
+		{ "slowcleanup", no_argument, NULL, 'c' },
+		{ "debuginfo",   no_argument, NULL, 'P' },
+
+		// Direct ruuveal support
+		{ "device", required_argument, NULL, 'd' },
+
+		{ 0, 0, 0, 0}
+	};
+
+	int c;
+	int opt_count = 0;
+
+	while ((c = getopt_long(argc, argv, "-sfzkcPd:oL", longopts, NULL)) != -1) {
+		switch (c) {
+			case 's':
+				opt_count++;
+				create_system_only = 1;
+				break;
+			case 'f':
+				opt_count++;
+				create_firmware_only = 1;
+				break;
+			case 'z':
+				opt_count++;
+				create_sd_zip = 1;
+				break;
+
+			case 'o':
+				opt_count++;
+				allow_download = 0;
+				allow_upload = 0;
+				break;
+			case 'N':
+				opt_count++;
+				allow_download = 1;
+				allow_upload = 0;
+				break;
+			case 'S':
+				opt_count++;
+				allow_download = 2;
+				allow_upload = 2;
+				break;
+
+			case 'L':
+				opt_count++;
+				create_log_file = 2;
+				//if (optarg)
+				//	log_file_name = optarg;
+				break;
+
+			case 'k':
+				opt_count++;
+				keep_all_files = 1;
+				do_immediate_cleanup = 0;
+				break;
+			case 'c':
+				opt_count++;
+				do_immediate_cleanup = 0;
+				break;
+			case 'P':
+				opt_count++;
+				print_debug_info = 1;
+				break;
+
+			case 'd':
+				opt_count++;
+				if (!optarg) {
+					PRINT_ERROR("No DEVICE parameter specified for --device DEVICE option.");
+					press_enter_to_exit();
+					write_log_file();
+					return 1;
+				}
+				else {
+					ruuveal_device = optarg;
+
+					int supported = 0;
+					htc_device_t *ptr;
+
+					for(ptr = htc_get_devices(); *ptr->name; ptr++) {
+						if (ruuveal_device == ptr->name) {
+							supported = 1;
+							break;
+						}
+					}
+
+					if (!supported) {
+						PRINT_ERROR("Incorrect parameter for --device: '%s' is not supported.", ruuveal_device.c_str());
+						PRINT_INFO("supported devices:-\n");
+						for(ptr = htc_get_devices(); *ptr->name; ptr++) {
+							PRINT_INFO("* %s (%s)", ptr->desc, ptr->name);
+						}
+						PRINT_INFO("");
+						press_enter_to_exit();
+						write_log_file();
+						exit(1);
+					}
+				}
+				break;
+
+			case 1:
+				if (optarg) {
+					if (path_ruuname.empty())
+						path_ruuname = optarg;
+					else if (!path_ruuname.empty())
+						path_hb = optarg;
+					else {
+						PRINT_ERROR("Too many arguments!");
+						return -1;
+					}
+				}
+				break;
+
+			case ':':   /* missing option argument */
+				PRINT_ERROR("Option -%c requires an argument!", c);
+				return -1;
+				break;
+
+			case '?':
+			default:
+				PRINT_ERROR("Invalid option specified!");
+				return -1;
+				break;
+		}
+	}
+
+	return opt_count;
+}
 
 int main(int argc, char **argv)
 {
 	create_log_file = 1;
 
 	PRINT_TITLE("+++ Welcome to the HTC RUU Decryption Tool %s +++", VERSION_STRING);
-	PRINT_INFO ("        by  nkk71  and  Captain_Throwback        ");
-	PRINT_INFO ("          Mac OS X support by topjohnwu          ");
 	PRINT_INFO("");
 
 	int exit_code = 0;
 	int is_exe;
 
-
-	// parse arguments
 	std::string path_cur = get_absolute_cwd();
 	std::string cmd_name = argv[0];
 
 	std::string path_ruuname;
 	std::string path_hb;
 
-	argc--;
-	argv++;
-	while(argc > 0) {
-		char *arg = argv[0];
 
-		argc -= 1;
-		argv += 1;
+	int options = Parse_CommandLine(argc, argv, path_ruuname, path_hb);
 
-		if (!strcmp(arg, "--keepall") || !strcmp(arg, "-k")) {
-			keep_all_files = 1;
-			do_immediate_cleanup = 0;
-		}
-		else if (!strcmp(arg, "--slowcleanup") || !strcmp(arg, "-c")) {
-			keep_all_files = 0;
-			do_immediate_cleanup = 0;
-		}
-		else if (!strcmp(arg, "--systemonly") || !strcmp(arg, "-s")) {
-			create_system_only = 1;
-		}
-		else if (!strcmp(arg, "--firmwareonly") || !strcmp(arg, "-f")) {
-			create_firmware_only = 1;
-		}
-		else if (!strcmp(arg, "--sdruuzip") || !strcmp(arg, "-z")) {
-			create_sd_zip = 1;
-		}
-		else if (!strcmp(arg, "--debuginfo") || !strcmp(arg, "-P")) {
-			print_debug_info = 1;
-		}
-		else if (!strcmp(arg, "--device") || !strcmp(arg, "-d")) {
-			if (argc > 0) {
-				ruuveal_device = argv[0];
-				argc -= 1;
-				argv += 1;
-			}
-			else {
-				PRINT_ERROR("No DEVICE parameter specified for --device DEVICE option.");
-				press_enter_to_exit();
-				write_log_file();
-				return 1;
-			}
+	if (options > 0 && create_log_file != 2)
+		create_log_file = 0;
 
-			int supported = 0;
-			htc_device_t *ptr;
-
-			for(ptr = htc_get_devices(); *ptr->name; ptr++) {
-				if (ruuveal_device == ptr->name) {
-					supported = 1;
-					break;
-				}
-			}
-
-			if (!supported) {
-				PRINT_ERROR("Incorrect parameter for --device: '%s' is not supported.", ruuveal_device.c_str());
-				PRINT_INFO("supported devices:-\n");
-				for(ptr = htc_get_devices(); *ptr->name; ptr++) {
-					PRINT_INFO("* %s (%s)", ptr->desc, ptr->name);
-				}
-				PRINT_INFO("");
-				press_enter_to_exit();
-				write_log_file();
-				return 1;
-			}
-		}
-		else if (path_ruuname.empty()) {
-			path_ruuname = arg;
-		}
-		else if (!path_ruuname.empty()) {
-			path_hb = arg;
-		}
-	}
-
-	if (path_ruuname.empty()) {
-		PRINT_INFO("");
-		PRINT_INFO("Usage: %s [options] <RUUName: RUU.exe or ROM.zip> [keyfile/hboot/hosd]", cmd_name.c_str());
-		PRINT_INFO("");
-		PRINT_INFO("   Optional arguments");
-		PRINT_INFO("      -s, --systemonly     only extract the system.img and boot.img (for ROM)");
-		PRINT_INFO("      -f, --firmwareonly   only extract the firmware files (exclude system.img)");
-		PRINT_INFO("      -z, --sdruuzip       also copy and rename rom.zip for SD-Card flashing");
-		PRINT_INFO("                           Note: this will create a duplicate if the input is already a rom.zip");
-		PRINT_INFO("");
-		PRINT_INFO("   Debugging Options (not usually needed)");
-		PRINT_INFO("      -k, --keepall        keep all intermediary files");
-		PRINT_INFO("      -c, --slowcleanup    do a 'slow cleanup', ie dont delete files once partially processed");
-		PRINT_INFO("      -P, --debuginfo      print debug info (paths and exec)");
-		PRINT_INFO("");
-		PRINT_INFO("   Direct ruuveal support (needed for older devices)");
-		PRINT_INFO("      -d, --device DEVICE  specify device (this is only needed for old unruu supported devices)");
-		PRINT_INFO("                           please run unruu to see the list of DEVICEs supported");
-		PRINT_INFO("");
-		PRINT_INFO("");
+	if (options < 0 || (path_ruuname.empty() && allow_download != 2)) {
+		Print_Usage(cmd_name);
 		press_enter_to_exit();
 		write_log_file();
 		return 1;
-	}
-
-	if ((create_system_only && create_firmware_only)) {
-		PRINT_INFO("");
-		PRINT_INFO("Usage Info: you have specified both -s and -f, this is the default behaviour");
-		PRINT_INFO("            and doesn't need to be specified it's either -s or -f, so both will");
-		PRINT_INFO("            be created in this case too.");
-		PRINT_INFO("");
-		create_system_only = 0;
-		create_firmware_only = 0;
 	}
 
 	// setup global paths
@@ -451,7 +538,6 @@ int main(int argc, char **argv)
 		return 2;
 	}
 
-	int options = 0; // assume no command line for now
 	if (options == 0) {
 		// No command line options specified, present simple Y/N interface
 		PRINT_TITLE("Please enter your choices");
