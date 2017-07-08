@@ -364,16 +364,24 @@ int run_program(const char *bin_to_run, char *argv[])
 		}
 
 		if (access(full_path_to_bin_file.c_str(), F_OK) == 0) {
+			//X_OK
+			std::string our_libs = "LD_LIBRARY_PATH=" + full_path_to_bins;
+			char *environ[] = { (char *)our_libs.c_str(), NULL };
+
 			if (print_debug_info) {
 				std::cout << "DBG about to execve (run internal program): '" << bin_to_run << "'" << std::endl;
 				i = 0;
 				while (exec_args[i] != NULL) {
 					std::cout << "DBG    '" << exec_args[i++] << "'" << std::endl;
 				}
+				i = 0;
+				while (environ[i] != NULL) {
+					std::cout << "DBG    env: '" << environ[i++] << "'" << std::endl;
+				}
 				std::cout << std::endl;
 				std::cout.flush();
 			}
-			execv(full_path_to_bin_file.c_str(), exec_args); // our binaries
+			execve(full_path_to_bin_file.c_str(), exec_args, environ); // our binaries
 		}
 		else {
 			if (print_debug_info) {
@@ -404,10 +412,7 @@ int run_program(const char *bin_to_run, char *argv[])
 		}
 		PRINT_INFO("");
 
-		// this is not working as intended: raise(SIGINT); // abort program
-
-		exit_code = -2;
-		return exit_code;
+		exit(-127);
 	}
 
 	// now wait for child to exit an return code
@@ -467,11 +472,11 @@ int run_program(const char *bin_to_run, char *argv[])
 	waitpid(child_pid, &status, 0);
 	if (WIFEXITED(status)) {
 		// child exited normally, get return value
-		WEXITSTATUS(status);
-		exit_code = status >> 8;
+		exit_code = WEXITSTATUS(status);
 	}
 	else {
 		PRINT_ERROR("child exited abnormally (status=%i, errno=%i '%s')", status, errno, strerror(errno));
+		raise(SIGINT); // abort program
 		exit_code = -3;
 	}
 
