@@ -68,8 +68,8 @@ extern std::stringstream log_stream;
 // program flags
 extern int keep_all_files;
 extern int do_immediate_cleanup;
-extern int create_system_only;
-extern int create_firmware_only;
+extern int create_system;
+extern int create_firmware;
 extern int create_sd_zip;
 extern int print_debug_info;
 extern std::string ruuveal_device;

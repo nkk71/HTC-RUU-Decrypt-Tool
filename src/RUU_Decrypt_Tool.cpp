@@ -64,8 +64,8 @@ std::stringstream log_stream;
 // program flags
 int keep_all_files = 0;
 int do_immediate_cleanup = 1;
-int create_system_only = 0;
-int create_firmware_only = 0;
+int create_system = 0;
+int create_firmware = 0;
 int create_sd_zip = 0;
 int print_debug_info = 0;
 int wait_for_enter = 0;
@@ -266,11 +266,11 @@ int Parse_CommandLine(int argc, char **argv, std::string &path_ruuname, std::str
 		switch (c) {
 			case 's':
 				opt_count++;
-				create_system_only = 1;
+				create_system = 1;
 				break;
 			case 'f':
 				opt_count++;
-				create_firmware_only = 1;
+				create_firmware = 1;
 				break;
 			case 'z':
 				opt_count++;
@@ -542,11 +542,9 @@ int main(int argc, char **argv)
 		// No command line options specified, present simple Y/N interface
 		PRINT_TITLE("Please enter your choices");
 		create_log_file = Prompt_User_YN("* Create a logfile [Y/n]: ", 'Y');
-		create_system_only = Prompt_User_YN("* Extract system.img and boot.img [Y/n]: ", 'Y');
-		create_firmware_only = Prompt_User_YN("* Extract the firmware files [Y/n]: ", 'Y');
-		if (create_system_only && create_firmware_only)
-			create_system_only = create_firmware_only = 0;
 
+		create_system = Prompt_User_YN("* Extract system.img and boot.img [Y/n]: ", 'Y');
+		create_firmware = Prompt_User_YN("* Extract the firmware files [Y/n]: ", 'Y');
 		create_sd_zip = Prompt_User_YN("* Create an sd-card flashable zip [y/N]: ", 'N');
 
 		allow_download = Prompt_User_YN("* Do you wish to check for new keyfiles [Y/n]: ", 'Y');
@@ -626,6 +624,8 @@ int main(int argc, char **argv)
 		}
 	}
 
+	//TODO: fix code for (create_sd_zip && !create_system && !create_firmware)
+
 	if (exit_code == 0) exit_code = ExtractZIPs(TMP_ROMZIP"/rom.zip", TMP_DUMPED_ZIPS);
 	if (exit_code == 0 && is_exe && !keep_all_files && !create_sd_zip) delete_file(TMP_ROMZIP"/rom.zip");
 
@@ -639,7 +639,7 @@ int main(int argc, char **argv)
 	if ((exit_code == 0) && !keep_all_files) delete_dir_contents(TMP_DECRYPTED_ZIPS);
 
 	if (exit_code == 0) {
-		if (!create_firmware_only) {
+		if (create_system) {
 			if (exit_code == 0) exit_code = MoveSystemIMGFiles(OUT_FIRMWARE, TMP_DECRYPTED_SYSIMGS);
 
 			if (exit_code == 0) {
@@ -683,7 +683,7 @@ int main(int argc, char **argv)
 			if (path_bootimg_file.empty()) {
 				PRINT_ERROR("Couldn't find a %s or %s to copy to system folder.", BOOTIMG, BOOTIMG_S);
 			}
-			else if (create_system_only) {
+			else if (!create_firmware) {
 				PRINT_PROGRESS("Moving %s to %s", path_bootimg_file.c_str(), OUT_SYSTEM"/boot.img");
 				move_file(path_bootimg_file.c_str(), OUT_SYSTEM"/boot.img");
 			}

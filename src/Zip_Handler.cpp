@@ -258,9 +258,11 @@ int UnzipDecryptedZIPs(const char *path_inp_zips, const char *path_outfiles)
 
 			PRINT_PROGRESS("\nUnzipping decrypted zip: (%i/%i) '%s'", i+1, num_of_zips, file_name);
 
-			if (create_system_only)
+			if (!create_system && !create_firmware)
+				res = run_program("unzip", "-n", file_name, ANDROIDINFO, "-d", full_path_to_outfiles.c_str(), NULL);
+			else if (create_system && !create_firmware)
 				res = run_program("unzip", "-n", file_name, ANDROIDINFO, SYSTEMIMG, BOOTIMG, BOOTIMG_S, "-d", full_path_to_outfiles.c_str(), NULL);
-			else if (create_firmware_only)
+			else if (create_firmware && !create_system)
 				res = run_program("unzip", "-n", file_name, "-x", SYSTEMIMG, "-d", full_path_to_outfiles.c_str(), NULL);
 			else
 				res = run_program("unzip", "-n", file_name, "-d", full_path_to_outfiles.c_str(), NULL);
