@@ -126,6 +126,56 @@ void signal_Handler(int sig_num)
 }
 
 
+// Prompts the user for a Y or N character. (returns 1 for Y, 0 for N)
+int Prompt_User_YN(const char *prompt_text, int default_char)
+{
+	int answer;
+	int c;
+	int num_of_chars;
+
+	default_char = tolower(default_char);
+
+	do {
+		printf("%s", prompt_text);
+		printf("%c", toupper(default_char)); printf("\033[1D");
+		fflush(stdout);
+
+		answer = 0;
+		num_of_chars = 0;
+
+		// loop till end of line to avoid having extra chars in the buffer
+		while ((c = getchar()) != EOF && c != '\n') {
+			num_of_chars++;
+			c = tolower(c);
+			if (c == 'y' || c == 'n')
+				answer = c;
+			//else
+			//	printf("\t Wrong input, please answer with Y or N !\n");
+		}
+
+		if (num_of_chars == 0 && c == '\n') {
+			answer = default_char;
+		}
+		else if (num_of_chars > 1) {
+			printf("\n\t Too many characters, please answer with Y or N !\n\n");
+			answer = 0;
+		}
+		else if (c != '\n')
+			printf("\n");
+
+	} while (answer != 'y' && answer != 'n');
+
+	fflush(stdin);
+	fflush(stdout);
+	fflush(stderr);
+
+	if (create_log_file)
+		log_stream << prompt_text << (char)answer << std::endl;
+
+	return answer == 'y';
+}
+
+
 void press_enter_to_exit(void)
 {
 #if defined(__CYGWIN__)
@@ -399,6 +449,34 @@ int main(int argc, char **argv)
 		press_enter_to_exit();
 		write_log_file();
 		return 2;
+	}
+
+	int options = 0; // assume no command line for now
+	if (options == 0) {
+		// No command line options specified, present simple Y/N interface
+		PRINT_TITLE("Please enter your choices");
+		create_log_file = Prompt_User_YN("* Create a logfile [Y/n]: ", 'Y');
+		create_system_only = Prompt_User_YN("* Extract system.img and boot.img [Y/n]: ", 'Y');
+		create_firmware_only = Prompt_User_YN("* Extract the firmware files [Y/n]: ", 'Y');
+		if (create_system_only && create_firmware_only)
+			create_system_only = create_firmware_only = 0;
+
+		create_sd_zip = Prompt_User_YN("* Create an sd-card flashable zip [y/N]: ", 'N');
+
+		allow_download = Prompt_User_YN("* Do you wish to check for new keyfiles [Y/n]: ", 'Y');
+		allow_upload   = Prompt_User_YN("* If a new keyfile is generated, do you wish to upload it [Y/n]: ", 'Y');
+
+		if (Prompt_User_YN("* Enable debugging options [y/N]: ", 'N')) {
+			print_debug_info = Prompt_User_YN("     * Print Debug Info [y/N]: ", 'N');
+			do_immediate_cleanup = ! Prompt_User_YN("     * Do a 'slow cleanup' [y/N]: ", 'N');
+			keep_all_files = Prompt_User_YN("     * Keep all intermediary files [y/N]: ", 'N');
+		}
+		printf("\n");
+		fflush(stdin);
+		fflush(stdout);
+		fflush(stderr);
+		printf("\n");
+		printf("\n");
 	}
 
 	exit_code = mkdir(full_path_to_wrk.c_str(), 0777);
