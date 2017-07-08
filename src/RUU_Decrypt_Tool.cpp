@@ -97,7 +97,7 @@ void write_log_file(std::string filename = "")
 // interrupt handler in case we need to move the original rom.zip back to origin
 void signal_Handler(int sig_num)
 {
-	printf("\n\nE-SIGNAL received signal=%i, try moving back rom.zip to origin and exit\n\n", sig_num);
+	printf("\nE-SIGNAL received signal=%i\n", sig_num);
 	if (!signal_full_path_to_tmpzip.empty()) {
 		printf("rom.zip was moved, try moving it back to origin\n");
 		rename(signal_full_path_to_tmpzip.c_str(), signal_full_path_to_ruu_zip.c_str());
