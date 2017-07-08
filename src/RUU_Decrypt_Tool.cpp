@@ -446,7 +446,12 @@ int main(int argc, char **argv)
 		full_path_to_maindir = convert_to_absolute_path(full_path_to_maindir);
 	}
 
+#if defined(__ANDROID__)
+	full_path_to_keys = "/sdcard/RUU_Decrypt_Tool/keyfiles";
+	mkdir("/sdcard/RUU_Decrypt_Tool", 0777);
+#else
 	full_path_to_keys = full_path_to_maindir + "/" + "keyfiles";
+#endif
 	mkdir(full_path_to_keys.c_str(), 0777);
 
 	if (path_ruuname.empty() && allow_download && allow_upload) {

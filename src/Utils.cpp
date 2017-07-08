@@ -39,7 +39,7 @@
 #endif
 
 
-#if defined(__CYGWIN__) || defined( __APPLE__)
+#if defined(__CYGWIN__) || defined( __APPLE__) || defined(__ANDROID__)
 	// scandir versionsort is missing in cygwin and mac
 	#include "versionsort/strverscmp.c"
 	#include "versionsort/versionsort.c"
