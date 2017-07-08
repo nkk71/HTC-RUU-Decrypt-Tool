@@ -26,6 +26,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <errno.h>
 
 #include <string>
 #include <iostream> // for std::cout
@@ -76,15 +77,19 @@ std::string signal_full_path_to_ruu_zip;
 
 void write_log_file(std::string filename = "")
 {
-	if (filename.empty())
+	if (!create_log_file || filename.empty())
 		return;
 
 	std::cout << "Writing logfile to: " << get_absolute_cwd() << "/" << filename << std::endl;
+	log_stream << "Writing logfile to: " << get_absolute_cwd() << "/" << filename << std::endl;
 
 	std::ofstream log_file(filename.c_str(), std::ofstream::out);
 	if (log_file.is_open()) {
 		log_file << log_stream.str() << std::endl;
 		log_file.close();
+	}
+	else {
+		std::cout << "Error writing logfile (" << strerror(errno) ")!" << std::endl;
 	}
 }
 
@@ -630,6 +635,7 @@ int main(int argc, char **argv)
 
 	PRINT_INFO("");
 
+	change_dir(full_path_to_final_out);
 	write_log_file("RUU_Decrypt_LOG-" + info.modelid + "_" + info.mainver + ".txt");
 
 	change_dir(path_cur.c_str());
