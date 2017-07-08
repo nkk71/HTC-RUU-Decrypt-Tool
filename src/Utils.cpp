@@ -125,12 +125,7 @@ int change_dir(const char *path)
 		return 0;
 }
 
-int change_dir(const std::string *path)
-{
-	return change_dir(path->c_str());
-}
-
-int change_dir(const std::string path)
+int change_dir(const std::string &path)
 {
 	return change_dir(path.c_str());
 }
@@ -191,9 +186,9 @@ int move_file(const char *source, const char *destination)
 		return 0;
 }
 
-int move_file(const std::string *source, const std::string *destination)
+int move_file(const std::string &source, const std::string &destination)
 {
-	return move_file(source->c_str(), destination->c_str());
+	return move_file(source.c_str(), destination.c_str());
 }
 
 int move_file(const char *filename, const char *source_path, const char *destination_path)
@@ -201,7 +196,7 @@ int move_file(const char *filename, const char *source_path, const char *destina
 	std::string src = (std::string) source_path + "/" + filename;
 	std::string dst = (std::string) destination_path + "/" + filename;
 
-	return move_file(&src, &dst);
+	return move_file(src, dst);
 }
 // ---------------------------------------------------------------------
 int delete_file(const char *source)
@@ -214,9 +209,9 @@ int delete_file(const char *source)
 		return 0;
 }
 
-int delete_file(const std::string *source)
+int delete_file(const std::string &source)
 {
-	return delete_file(source->c_str());
+	return delete_file(source.c_str());
 }
 
 int delete_dir_contents(const char *path)

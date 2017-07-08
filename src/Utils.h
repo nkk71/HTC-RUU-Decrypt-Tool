@@ -43,20 +43,19 @@ int win_path_has_spaces(const char *path);
 #endif
 
 int change_dir(const char *path);
-int change_dir(const std::string *path);
-int change_dir(const std::string path);
+int change_dir(const std::string &path);
 
 int copy_file(const char *source, const char *destination, int skip = 0);
-int copy_file(const std::string *source, const std::string *destination, int skip = 0);
+int copy_file(const std::string &source, const std::string &destination, int skip = 0);
 
 int append_file(const char *source, const char *destination);
 
 int move_file(const char *source, const char *destination);
-int move_file(const std::string *source, const std::string *destination);
+int move_file(const std::string &source, const std::string &destination);
 int move_file(const char *filename, const char *source_path, const char *destination_path);
 
 int delete_file(const char *source);
-int delete_file(const std::string *source);
+int delete_file(const std::string &source);
 
 int delete_dir_contents(const char *path);
 
