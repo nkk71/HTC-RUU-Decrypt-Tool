@@ -93,7 +93,27 @@ void write_log_file(std::string filename = "")
 void signal_Handler(int sig_num)
 {
 	printf("\n\nE-SIGNAL received signal=%i, try moving back rom.zip to origin and exit\n\n", sig_num);
-	rename(signal_full_path_to_tmpzip.c_str(), signal_full_path_to_ruu_zip.c_str());
+	if (!signal_full_path_to_tmpzip.empty()) {
+		printf("rom.zip was moved, try moving it back to origin\n");
+		rename(signal_full_path_to_tmpzip.c_str(), signal_full_path_to_ruu_zip.c_str());
+	}
+
+	fflush(stdout); fflush(stderr);
+	write_log_file();
+
+	// OUT cleanup
+	change_dir("/");
+	if (!full_path_to_wrk.empty()) {
+		remove((full_path_to_wrk + TMP_ROMZIP).c_str());
+		remove((full_path_to_wrk + TMP_DUMPED_ZIPS).c_str());
+		remove((full_path_to_wrk + TMP_DECRYPTED_ZIPS).c_str());
+		remove((full_path_to_wrk + TMP_DECRYPTED_SYSIMGS).c_str());
+		remove((full_path_to_wrk + OUT_FIRMWARE).c_str());
+		remove((full_path_to_wrk + OUT_SYSTEM).c_str());
+		remove((full_path_to_wrk + "tmp").c_str());
+		remove(full_path_to_wrk.c_str());
+	}
+
 	exit(sig_num);
 }
 
@@ -388,6 +408,12 @@ int main(int argc, char **argv)
 		return 2;
 	}
 
+	// setup interrupt handler
+	signal_full_path_to_tmpzip.clear();  // this will be set later if the zip actually get's moved
+	signal_full_path_to_ruu_zip = full_path_to_ruu_file;
+	signal(SIGINT , signal_Handler);     // handle CTRL+C  //   2  /* Interrupt (ANSI).  */
+	signal(SIGTSTP, signal_Handler);     // handle CTRL+Z  //  20  /* Keyboard stop (POSIX).  */
+
 	std::string path_android_info_file;
 	android_info info;
 
@@ -414,12 +440,6 @@ int main(int argc, char **argv)
 			// setup interrupt handler to restore file
 			signal_full_path_to_tmpzip = full_path_to_wrk + "/" + TMP_ROMZIP"/rom.zip";
 			signal_full_path_to_ruu_zip = full_path_to_ruu_file;
-
-			// handle CTRL+C
-			signal(SIGINT	, signal_Handler);	//	2	/* Interrupt (ANSI).  */
-
-			// handle CTRL+Z
-			signal(SIGTSTP	, signal_Handler);	//	20	/* Keyboard stop (POSIX).  */
 		}
 	}
 
