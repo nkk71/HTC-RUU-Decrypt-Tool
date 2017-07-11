@@ -28,6 +28,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <getopt.h>
+#include <ctime>
 
 #include <string>
 #include <iostream> // for std::cout
@@ -78,6 +79,18 @@ int create_log_file = 0;
 std::string signal_full_path_to_tmpzip;
 std::string signal_full_path_to_ruu_zip;
 
+std::string Current_DateTime(void)
+{
+	std::time_t rawtime;
+	std::tm* timeinfo;
+	char buffer[25];
+
+	std::time(&rawtime);
+	timeinfo = std::localtime(&rawtime);
+
+	std::strftime(buffer, sizeof(buffer),"%Y-%m-%d_%H%M%S", timeinfo);
+	return buffer;
+}
 
 void write_log_file(std::string filename = "")
 {
@@ -832,7 +845,7 @@ int main(int argc, char **argv)
 	PRINT_INFO("");
 
 	change_dir(full_path_to_final_out);
-	write_log_file("RUU_Decrypt_LOG-" + info.modelid + "_" + info.mainver + ".txt");
+	write_log_file("RUU_Decrypt_LOG-" + info.modelid + "_" + info.mainver + "_" + Current_DateTime() + ".txt");
 
 	change_dir(path_cur.c_str());
 
