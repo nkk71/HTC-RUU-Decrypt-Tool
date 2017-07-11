@@ -32,31 +32,6 @@
 #include "Zip_Handler.h"
 #include "Key_Finder.h"
 
-// =====================================================================
-// AIK paths relative to bin/
-// ---------------------------------------------------------------------
-//#if defined(WIN32) || defined(_WIN32) || defined(__WIN32)
-#if defined(__CYGWIN__)
-
-#define AIK_BASE		"AIK-Windows"
-#define AIK_UNPACK		AIK_BASE"/unpackimg.bat"
-#define AIK_CLEANUP		AIK_BASE"/cleanup.bat"
-
-#elif defined(__APPLE__)
-
-#define AIK_BASE		"AIK-OSX"
-#define AIK_UNPACK		AIK_BASE"/unpackimg.sh"
-#define AIK_CLEANUP		AIK_BASE"/cleanup.sh"
-
-#else
-
-#define AIK_BASE		"AIK-Linux"
-#define AIK_UNPACK		AIK_BASE"/unpackimg.sh"
-#define AIK_CLEANUP		AIK_BASE"/cleanup.sh"
-
-#endif //__CYGWIN__ __APPLE__
-// =====================================================================
-
 
 // used by --device DEVICE
 #include "ruuveal/htc/devices.h"
@@ -178,6 +153,7 @@ int Test_KeyFile(const char *path_enczip, const char *path_keyfile)
 	else {
 		// ruuveal couldnt decrypt using that key
 		// PRINT_PROGRESS("WARNING: ruuveal failed (res=%i)!", res);
+		// Add keyfile error checking here!!
 		exit_code = 1;
 	}
 
@@ -272,56 +248,34 @@ int KeyFinder_CheckInputFile(const char *full_path_encrypted_zip_file, const cha
 	else if (check_magic(full_path_hboot_file, 0, BOOT_MAGIC)) {
 		PRINT_PROGRESS("... assuming hosd, going to unpack it...");
 
-
-		// ALTERNATE METHOD NOT REQUIRING THE ENTIRE AIK
-		// run unpack
-		// run 7za
-		// run bruutveal on ramdisk (dont even need to unpack it)
-
-#if defined(__CYGWIN__)
-		// no "reliable" method of invoking AIK by full path, in cygwin when both bin path and hosd path have spaces,
-		// windows "cmd /C ..." would need double quotes, eg: cmd /C ""path with spaces to exe" "path to file with spaces""
-		// which doesnt work, so temp copy the file to AIK and run (in most cases this should be writeable if it's not, fail)
-		// maybe i should just get rid of it completely, and use the alternate method -_-
-		if (win_path_has_spaces(full_path_to_bins.c_str()) && win_path_has_spaces(full_path_hboot_file)) {
-			std::string aik_tmp_hosd = full_path_to_bins + "/" + AIK_BASE + "/" + "tmp_hosd";
-
-			if (print_debug_info)
-				PRINT_DBG("the Tool path and the RUU path contain spaces; temporarily copy hosd file into the AIK folder");
-
-			if (copy_file(full_path_hboot_file, aik_tmp_hosd.c_str()) != 0) {
-				PRINT_ERROR("the Tool path and the RUU path contain spaces; temporarily copy hosd file into the AIK folder failed!");
-				exit_code = 5;
-			}
-			else {
-				res = run_program(AIK_UNPACK, "tmp_hosd", NULL);
-
-				delete_file(aik_tmp_hosd.c_str());
-			}
-		}
-		else // { // no brackets are needed since the next command is only one line, otherwise we'd need them!!
-#endif  //__CYGWIN__
-
-		res = run_program(AIK_UNPACK, full_path_hboot_file, NULL);
+		change_dir(full_path_to_wrk);
+		res = run_program("magiskboot", "--unpack", full_path_hboot_file, NULL);
 
 		if (res == 0) {
-			std::string downloadzip = full_path_to_bins + "/" + AIK_BASE + "/ramdisk/sbin/downloadzip";
-			if (access(downloadzip.c_str(), R_OK) == 0) {
-				if (Run_BRUUTVEAL(downloadzip.c_str(), full_path_encrypted_zip_file, full_path_output_key_file) == 0) {
-					exit_code = 0;
+			res = run_program("magiskboot", "--cpio-extract", "ramdisk.cpio", "sbin/downloadzip", "downloadzip", NULL);
+			if (res == 0) {
+				std::string downloadzip = full_path_to_wrk + "/downloadzip";
+				if (access(downloadzip.c_str(), R_OK) == 0) {
+					if (Run_BRUUTVEAL(downloadzip.c_str(), full_path_encrypted_zip_file, full_path_output_key_file) == 0) {
+						exit_code = 0;
+					}
+					delete_file(full_path_to_wrk + "/downloadzip");
+				}
+				else {
+					PRINT_ERROR("hosd unpacked, but couldn't access downloadzip file");
+					exit_code = 3;
 				}
 			}
 			else {
-				PRINT_ERROR("hosd unpacked, but couldn't access downloadzip file");
-				exit_code = 3;
+					PRINT_ERROR("Unable to extract downloadzip (res=%i)", res);
+					exit_code = 3;
 			}
+			res = run_program("magiskboot", "--cleanup", NULL);
 		}
 		else {
 			PRINT_ERROR("Unable to unpack hosd (res=%i)", res);
 			exit_code = 4;
 		}
-
-		run_program(AIK_CLEANUP, NULL);
 	}
 	else {
 		PRINT_PROGRESS("... assuming hboot...");
