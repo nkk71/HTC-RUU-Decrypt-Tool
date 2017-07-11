@@ -666,7 +666,10 @@ int main(int argc, char **argv)
 				struct dirent **entry_list;
 
 				num_of_sysimg_dirs = versionsort_scandir(TMP_DECRYPTED_SYSIMGS, &entry_list, select_dirs);
-				if (is_scandir_error(entry_list, num_of_sysimg_dirs)) {
+				if (num_of_sysimg_dirs < 0) {
+					exit_code = 2;
+				}
+				else if (num_of_sysimg_dirs == 0) {
 					PRINT_ERROR("No system img directories found!");
 					exit_code = 2;
 				}

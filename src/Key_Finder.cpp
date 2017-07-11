@@ -66,7 +66,7 @@ int Check_If_New_Keyfile(const char *path_new_key_file, const char *full_path_ke
 
 	if (exit_code == 1) {
 		num_of_keys = versionsort_scandir(".", &entry_list, select_files_keyfiles);
-		if (is_scandir_error(entry_list, num_of_keys)) {
+		if (num_of_keys < 0) {
 			exit_code = 5;
 		}
 		else {
@@ -301,10 +301,12 @@ int KeyFinder_CheckKeyfilesFolder(const char *full_path_encrypted_zip_file, cons
 	struct dirent **entry_list;
 
 	num_of_keys = versionsort_scandir(full_path_keys, &entry_list, select_files_keyfiles);
-	if (is_scandir_error(entry_list, num_of_keys)) {
+	if (num_of_keys < 0) {
 		exit_code = 2;
 	}
 	else {
+		if (num_of_keys == 0)
+			PRINT_INFO("Your keyfile folder is empty!");
 		for (i = 0; i < num_of_keys; i++) {
 			char * keyfile = entry_list[i]->d_name;
 			std::string full_path_key_file = (std::string) full_path_keys + "/" + keyfile;
@@ -366,7 +368,7 @@ int KeyFinder_TryForceExtraction(const char *full_path_encrypted_zip_file, const
 
 	// try to extract hboot or hosd
 	num_of_zips = versionsort_scandir(".", &entry_list, select_files_zip);
-	if (is_scandir_error(entry_list, num_of_zips)) {
+	if (num_of_zips < 0) {
 		exit_code = 2;
 	}
 	else {

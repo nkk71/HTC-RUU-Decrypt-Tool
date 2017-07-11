@@ -41,7 +41,12 @@ std::string Find_First_Encrypted_ZIP(void)
 	std::string encrypted_zip;
 
 	num_of_zips = versionsort_scandir(".", &entry_list, select_files_zip);
-	if (is_scandir_error(entry_list, num_of_zips)) {
+	if (num_of_zips < 0) {
+		return "ERROR-1";
+	}
+	else if (num_of_zips == 0) {
+		free_dirent_entry_list(entry_list, num_of_zips);
+		PRINT_ERROR("No zip files found!");
 		return "ERROR-1";
 	}
 
@@ -104,10 +109,14 @@ int DecryptZIPs(const char *path_inp_dumpedzips, const char *path_out_decryptedz
 
 
 	num_of_zips = versionsort_scandir(".", &entry_list, select_files_zip);
-	if (is_scandir_error(entry_list, num_of_zips)) {
+	if (num_of_zips < 0) {
 		exit_code = 2;
 	}
-
+	else if (num_of_zips == 0) {
+		free_dirent_entry_list(entry_list, num_of_zips);
+		PRINT_ERROR("No zip files found!");
+		exit_code = 2;
+	}
 	else {
 		// begin processing zips
 		for (i = 0; i < num_of_zips; i++) {
@@ -248,7 +257,11 @@ int UnzipDecryptedZIPs(const char *path_inp_zips, const char *path_outfiles)
 
 	// unzip all zip files to decrypted_all
 	num_of_zips = versionsort_scandir(".", &entry_list, select_files_zip);
-	if (is_scandir_error(entry_list, num_of_zips)) {
+	if (num_of_zips < 0) {
+		exit_code = 2;
+	}
+	else if (num_of_zips == 0) {
+		free_dirent_entry_list(entry_list, num_of_zips);
 		PRINT_ERROR("No zip files found!");
 		exit_code = 2;
 	}

@@ -553,7 +553,10 @@ int select_dirs(const struct dirent *de)
 
 int versionsort_scandir(const char *dirp, struct dirent ***namelist, int (*filter)(const struct dirent *))
 {
-	return scandir(dirp, namelist, filter, versionsort);
+	int res = scandir(dirp, namelist, filter, versionsort);
+	if (res < 0)
+		PRINT_ERROR("scandir error");
+	return res;
 }
 
 void free_dirent_entry_list(struct dirent **entry_list, int count)
@@ -563,19 +566,6 @@ void free_dirent_entry_list(struct dirent **entry_list, int count)
 	for (i = 0; i < count; i++)
 		free(entry_list[i]);
 	free(entry_list);
-}
-
-int is_scandir_error(struct dirent **entry_list, int count)
-{
-	if (count < 0) {
-		PRINT_ERROR("scandir error");
-		return 1;
-	} else if (count == 0) {
-		PRINT_ERROR("no files found");
-		free_dirent_entry_list(entry_list, count);
-		return 1;
-	}
-	return 0;
 }
 
 

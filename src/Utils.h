@@ -75,7 +75,6 @@ int select_files_keyfiles(const struct dirent *de);
 int select_dirs(const struct dirent *de);
 int versionsort_scandir(const char *dirp, struct dirent ***namelist, int (*filter)(const struct dirent *));
 void free_dirent_entry_list(struct dirent **entry_list, int count);
-int is_scandir_error(struct dirent **entry_list, int count);
 
 std::string find_file_from_pattern(const char *path, const char *pattern);
 

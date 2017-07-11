@@ -76,8 +76,13 @@ int CreateSystemIMG(const char *path_inp_sysimgfiles, const char *path_output_sy
 	struct dirent **entry_list;
 
 	num_of_imgs = versionsort_scandir(".", &entry_list, select_files_systemimg);
-	if (is_scandir_error(entry_list, num_of_imgs))
+	if (num_of_imgs < 0)
 		return 2;
+	else if (num_of_imgs == 0) {
+		free_dirent_entry_list(entry_list, num_of_imgs);
+		PRINT_ERROR("No img files found!");
+		return 2;
+	}
 
 	remove(full_path_output_system_img_file.c_str());
 
@@ -217,7 +222,12 @@ int MoveSystemIMGFiles(const char *path_inp_files, const char *path_outsystemimg
 	struct dirent **entry_list;
 
 	num_of_imgs = versionsort_scandir(".", &entry_list, select_files_systemimg);
-	if (is_scandir_error(entry_list, num_of_imgs)) {
+	if (num_of_imgs < 0) {
+		exit_code = 2;
+	}
+	else if (num_of_imgs == 0) {
+		free_dirent_entry_list(entry_list, num_of_imgs);
+		PRINT_ERROR("No img files found!");
 		exit_code = 2;
 	}
 	else {
