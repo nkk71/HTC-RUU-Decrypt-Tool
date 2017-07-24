@@ -1,3 +1,24 @@
 [submodule "src/ruuveal"]
 	path = src/ruuveal
 	url = ../ruuveal.git
+[submodule "src/simg2img"]
+	path = src/simg2img
+	url = ../android-simg2img.git
+[submodule "src/unzip60"]
+	path = src/unzip60
+	url = ../unzip60.git
+[submodule "src/unshield"]
+	path = src/unshield
+	url = ../unshield.git
+[submodule "src/unruu"]
+	path = src/unruu
+	url = ../unruu.git
+[submodule "src/curl"]
+	path = src/curl
+	url = ../curl.git
+[submodule "src/c-ares"]
+	path = src/c-ares
+	url = ../c-ares.git
+[submodule "src/e2fsprogs"]
+	path = src/e2fsprogs
+	url = ../e2fsprogs.git
