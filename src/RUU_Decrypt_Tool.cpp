@@ -28,12 +28,11 @@
 #include <signal.h>
 #include <errno.h>
 #include <getopt.h>
-#include <ctime>
 
 #include <string>
 #include <iostream> // for std::cout
-#include <fstream> // for std::ofstream
-#include <sstream> // for std::stringstream
+#include <fstream>  // for std::ofstream
+#include <sstream>  // for std::stringstream
 
 #if defined( __APPLE__)
 	// mac specific header
@@ -47,6 +46,7 @@
 #include "Zip_Handler.h"
 #include "RUU_Functions.h"
 #include "Updater.h"
+#include "Time_Functions.h"
 
 #include "RUU_Decrypt_Tool.h"
 
@@ -79,32 +79,6 @@ int create_log_file = 0;
 std::string signal_full_path_to_tmpzip;
 std::string signal_full_path_to_ruu_zip;
 
-std::string Current_DateTime(void)
-{
-#if defined(__ANDROID__)
-	if (!getenv("TZ")) {
-		FILE * fp = popen("getprop persist.sys.timezone", "r");
-		if (fp) {
-			char output[100];
-			if (fgets(output, sizeof(output), fp)) {
-				output[strlen(output)-1] = 0;
-				setenv("TZ", output, 0);
-			}
-			pclose(fp);
-		}
-	}
-#endif
-
-	std::time_t rawtime;
-	std::tm* timeinfo;
-	char buffer[25];
-
-	std::time(&rawtime);
-	timeinfo = std::localtime(&rawtime);
-
-	std::strftime(buffer, sizeof(buffer),"%Y-%m-%d_%H%M%S", timeinfo);
-	return buffer;
-}
 
 void write_log_file(std::string filename = "")
 {
@@ -407,6 +381,7 @@ int Parse_CommandLine(int argc, char **argv, std::string &path_ruuname, std::str
 
 int main(int argc, char **argv)
 {
+	Timer_ToolStart();
 	create_log_file = 1;
 
 	PRINT_TITLE("+++ Welcome to the HTC RUU Decryption Tool %s +++", VERSION_STRING);
@@ -581,6 +556,7 @@ int main(int argc, char **argv)
 		fflush(stderr);
 		printf("\n");
 		printf("\n");
+		Timer_ToolStart(); // Update start time due to *GUI* :P
 	}
 
 	if (print_debug_info) {
@@ -625,14 +601,14 @@ int main(int argc, char **argv)
 
 
 	if (allow_download)
-		Download_Keyfiles(full_path_to_keys.c_str());
+		TIME_OPERATION( "Download_Keyfiles", Download_Keyfiles(full_path_to_keys.c_str()); );
 
 	std::string path_android_info_file;
 	android_info info;
 
 	// begin main processing
 	if (is_exe) {
-		exit_code = UnRUU(full_path_to_ruu_file.c_str(), TMP_ROMZIP);
+		TIME_OPERATION( "unruu", exit_code = UnRUU(full_path_to_ruu_file.c_str(), TMP_ROMZIP); );
 		if (exit_code == 0) {
 			// android-info from RUU.EXE, will get overwritten later if found in decrypted zip
 			path_android_info_file = find_file_from_pattern(TMP_ROMZIP, "*android-info*.txt*");
@@ -658,16 +634,16 @@ int main(int argc, char **argv)
 
 	//TODO: fix code for (create_sd_zip && !create_system && !create_firmware)
 
-	if (exit_code == 0) exit_code = ExtractZIPs(TMP_ROMZIP"/rom.zip", TMP_DUMPED_ZIPS);
+	if (exit_code == 0) TIME_OPERATION( "ExtractZIPs", exit_code = ExtractZIPs(TMP_ROMZIP"/rom.zip", TMP_DUMPED_ZIPS); );
 	if (exit_code == 0 && is_exe && !keep_all_files && !create_sd_zip) delete_file(TMP_ROMZIP"/rom.zip");
 
-	if (exit_code == 0) exit_code = KeyFinder(TMP_DUMPED_ZIPS, full_path_to_keys.c_str(), full_path_to_hb_file.c_str(), "tmp/use_keyfile.bin");
+	if (exit_code == 0) TIME_OPERATION( "KeyFinder", exit_code = KeyFinder(TMP_DUMPED_ZIPS, full_path_to_keys.c_str(), full_path_to_hb_file.c_str(), "tmp/use_keyfile.bin"); );
 
-	if (exit_code == -1) 		exit_code = DecryptZIPs(TMP_DUMPED_ZIPS, TMP_DECRYPTED_ZIPS, NULL); //not encrypted
-	else if (exit_code == 0)	exit_code = DecryptZIPs(TMP_DUMPED_ZIPS, TMP_DECRYPTED_ZIPS, "tmp/use_keyfile.bin");
+	if (exit_code == -1) TIME_OPERATION( "DecryptZIPs ", exit_code = DecryptZIPs(TMP_DUMPED_ZIPS, TMP_DECRYPTED_ZIPS, NULL); ); //not encrypted
+	else if (exit_code == 0) TIME_OPERATION( "DecryptZIPs", exit_code = DecryptZIPs(TMP_DUMPED_ZIPS, TMP_DECRYPTED_ZIPS, "tmp/use_keyfile.bin"); );
 	if ((exit_code == 0) && !keep_all_files) delete_dir_contents(TMP_DUMPED_ZIPS);
 
-	if (exit_code == 0) exit_code = UnzipDecryptedZIPs(TMP_DECRYPTED_ZIPS, OUT_FIRMWARE);
+	if (exit_code == 0) TIME_OPERATION( "UnzipDecryptedZIPs", exit_code = UnzipDecryptedZIPs(TMP_DECRYPTED_ZIPS, OUT_FIRMWARE); );
 	if ((exit_code == 0) && !keep_all_files) delete_dir_contents(TMP_DECRYPTED_ZIPS);
 
 	if (exit_code == 0) {
@@ -698,7 +674,7 @@ int main(int argc, char **argv)
 						sprintf(in_dir, "%s/%s", TMP_DECRYPTED_SYSIMGS, sysimg_name);
 						sprintf(out_file, "%s/%s%s", OUT_SYSTEM, sysimg_name, ".img");
 
-						if (exit_code_tmp == 0) exit_code_tmp = CreateSystemIMG(in_dir, out_file);
+						if (exit_code_tmp == 0) TIME_OPERATION( "Create system.img", exit_code_tmp = CreateSystemIMG(in_dir, out_file); );
 						if ((exit_code_tmp == 0) && !keep_all_files) { delete_dir_contents(in_dir); remove(in_dir); }
 
 						if (exit_code_tmp == 0) exit_code_tmp = TestSystemIMG(out_file);
@@ -852,6 +828,8 @@ int main(int argc, char **argv)
 			full_path_to_final_out = full_path_to_wrk;
 		}
 	}
+
+	Timer_ToolEnd();
 
 	//Finished:
 	if (exit_code == 0)
