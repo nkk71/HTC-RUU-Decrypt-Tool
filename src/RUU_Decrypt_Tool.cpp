@@ -81,6 +81,20 @@ std::string signal_full_path_to_ruu_zip;
 
 std::string Current_DateTime(void)
 {
+#if defined(__ANDROID__)
+	if (!getenv("TZ")) {
+		FILE * fp = popen("getprop persist.sys.timezone", "r");
+		if (fp) {
+			char output[100];
+			if (fgets(output, sizeof(output), fp)) {
+				output[strlen(output)-1] = 0;
+				setenv("TZ", output, 0);
+			}
+			pclose(fp);
+		}
+	}
+#endif
+
 	std::time_t rawtime;
 	std::tm* timeinfo;
 	char buffer[25];
