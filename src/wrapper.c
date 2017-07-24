@@ -52,5 +52,6 @@ int __real_main(int argc, char * const *argv);
 
 int __wrap_main(int argc, char * const *argv) {
 	setvbuf(stdout, NULL, _IOLBF, 0);
+	const char * identifier = "RUU_Decrypt_Tool_Wrapper"; // text to identify wrapped binaries
 	return __real_main(argc, argv);
 }
