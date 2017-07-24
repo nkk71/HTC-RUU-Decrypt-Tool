@@ -616,6 +616,8 @@ int main(int argc, char **argv)
 
 			PRINT_INFO("");
 			PRINT_INFO("Information extracted from RUU.EXE:");
+			// if (info.modelid.empty() && info.mainver.empty())
+			//    huh -_-
 			if (!info.modelid.empty()) PRINT_INFO("    INFO: RUU modelid: %s", info.modelid.c_str());
 			if (!info.mainver.empty()) PRINT_INFO("    INFO: RUU mainver: %s", info.mainver.c_str());
 			PRINT_INFO("");
