@@ -534,18 +534,6 @@ int main(int argc, char **argv)
 	full_path_to_wrk = full_path_to_ruu_file;
 	full_path_to_wrk = full_path_to_wrk.substr(0, full_path_to_wrk.find_last_of('/')) + "/" + OUT_MAIN;
 
-	if (print_debug_info) {
-		PRINT_DBG("full_path_to_maindir='%s'", full_path_to_maindir.c_str());
-		PRINT_DBG("full_path_to_keys='%s'", full_path_to_keys.c_str());
-		PRINT_DBG("full_path_to_bins'%s'", full_path_to_bins.c_str());
-		PRINT_DBG("full_path_to_wrk'%s'", full_path_to_wrk.c_str());
-		PRINT_DBG("full_path_to_ruu_file='%s'", full_path_to_ruu_file.c_str());
-		PRINT_DBG("full_path_to_hb_file='%s'", full_path_to_hb_file.c_str());
-		PRINT_DBG("PATH='%s'", getenv("PATH"));
-		PRINT_INFO("");
-		PRINT_INFO("");
-	}
-
 	// all operations are going to be based in the wrk folder
 	// it will be used a "base" for all functions
 	if (access(full_path_to_wrk.c_str(), F_OK) == 0) {
@@ -579,6 +567,18 @@ int main(int argc, char **argv)
 		fflush(stderr);
 		printf("\n");
 		printf("\n");
+	}
+
+	if (print_debug_info) {
+		PRINT_DBG("full_path_to_maindir='%s'", full_path_to_maindir.c_str());
+		PRINT_DBG("full_path_to_keys='%s'", full_path_to_keys.c_str());
+		PRINT_DBG("full_path_to_bins'%s'", full_path_to_bins.c_str());
+		PRINT_DBG("full_path_to_wrk'%s'", full_path_to_wrk.c_str());
+		PRINT_DBG("full_path_to_ruu_file='%s'", full_path_to_ruu_file.c_str());
+		PRINT_DBG("full_path_to_hb_file='%s'", full_path_to_hb_file.c_str());
+		PRINT_DBG("PATH='%s'", getenv("PATH"));
+		PRINT_INFO("");
+		PRINT_INFO("");
 	}
 
 	exit_code = mkdir(full_path_to_wrk.c_str(), 0777);
