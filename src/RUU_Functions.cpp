@@ -20,6 +20,8 @@
  */
 
 #include <stdio.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 #include <string>
 #include <fstream>
@@ -70,7 +72,44 @@ int UnRUU(const char *path_ruu_exe_name, const char *path_out)
 		exit_code = 4;
 	}
 
-// TODO: check the files we got and rename accordingly
+	if (access("rom.zip", F_OK) == 0) {
+		// PRINT_INFO("Found rom.zip");
+	}
+	else if (access("rom_01.zip", F_OK) == 0 && access("rom_02.zip", F_OK) == 0) {
+		PRINT_PROGRESS("Found rom_01.zip + rom_02.zip");
+		exit_code = 5;
+		struct stat stat_file01;
+		struct stat stat_file02;
+		if (stat("rom_01.zip", &stat_file01) < 0)
+			PRINT_ERROR("Couldn't get rom_01.zip filesize!");
+		else if (stat("rom_02.zip", &stat_file02) < 0)
+			PRINT_ERROR("Couldn't get rom_02.zip filesize!");
+		else {
+			const char *minor_rom;
+			if (stat_file01.st_size > stat_file02.st_size) {
+				PRINT_PROGRESS("rom_01.zip is the dominant zip and will be used for further processing");
+				rename("rom_01.zip", "rom.zip");
+				minor_rom = "rom_02.zip";
+			}
+			else {
+				PRINT_PROGRESS("rom_02.zip is the dominant zip and will be used for further processing");
+				rename("rom_02.zip", "rom.zip");
+				minor_rom = "rom_01.zip";
+			}
+
+			if (access("android-info.txt", F_OK) < 0) {
+				PRINT_PROGRESS("Attempting extract of android-info.txt from %s...", minor_rom);
+				run_program("unzip", "-n", minor_rom, "android-info.txt", NULL);
+			}
+			PRINT_PROGRESS("Attempting extract of hboot/hosd from %s...", minor_rom);
+			run_program("unzip", "-n", minor_rom, "hboot*", "hosd*", NULL);
+			exit_code = 0;
+		}
+	}
+	else {
+		PRINT_ERROR("UnRUU failed to produce either rom.zip or rom_01.zip+rom_02.zip aborting!");
+		exit_code = 6;
+	}
 
 	change_dir(path_base);
 

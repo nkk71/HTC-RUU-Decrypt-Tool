@@ -613,7 +613,7 @@ int main(int argc, char **argv)
 
 	// begin main processing
 	if (is_exe) {
-		TIME_OPERATION( "unruu", exit_code = UnRUU(full_path_to_ruu_file.c_str(), TMP_ROMZIP); );
+		TIME_OPERATION( "UnRUU", exit_code = UnRUU(full_path_to_ruu_file.c_str(), TMP_ROMZIP); );
 		if (exit_code == 0) {
 			// android-info from RUU.EXE, will get overwritten later if found in decrypted zip
 			path_android_info_file = find_file_from_pattern(TMP_ROMZIP, "*android-info*.txt*");
@@ -621,10 +621,24 @@ int main(int argc, char **argv)
 
 			PRINT_INFO("");
 			PRINT_INFO("Information extracted from RUU.EXE:");
-			// if (info.modelid.empty() && info.mainver.empty())
-			//    huh -_-
+			if (info.modelid.empty() && info.mainver.empty())
+				PRINT_INFO("    No android-info.txt was found in the exe");
 			if (!info.modelid.empty()) PRINT_INFO("    INFO: RUU modelid: %s", info.modelid.c_str());
 			if (!info.mainver.empty()) PRINT_INFO("    INFO: RUU mainver: %s", info.mainver.c_str());
+
+			std::string hb_file = find_file_from_pattern((full_path_to_wrk + "/" + TMP_ROMZIP).c_str(), "hboot*");
+			if (hb_file.empty())
+				hb_file = find_file_from_pattern((full_path_to_wrk + "/" + TMP_ROMZIP).c_str(), "hosd*");
+			if (!hb_file.empty()) {
+				if (full_path_to_hb_file.empty()) {
+					PRINT_INFO("    Found %s, will use it for keyfile generation if needed", get_basename(hb_file.c_str()));
+					full_path_to_hb_file = hb_file;
+				}
+				else {
+					PRINT_INFO("    Found %s, however you have already supplied an hboot/hosd, if", get_basename(hb_file.c_str()));
+					PRINT_INFO("    decryption fails, run the tool again without supplying hboot/hosd");
+				}
+			}
 			PRINT_INFO("");
 		}
 	}
