@@ -89,10 +89,28 @@ int CreateSystemIMG(const char *path_inp_sysimgfiles, const char *path_output_sy
 	if (num_of_imgs == 1) {
 		char * file_name = entry_list[0]->d_name;
 		// Simple system.img
-		PRINT_PROGRESS("Single '%s' found, moving it to output path", path_output_system_img_file);
-		if ((res = move_file(file_name, full_path_output_system_img_file.c_str()))) {
-			PRINT_ERROR("could not create system.img (err=%i)", res);
-			exit_code = 3;
+		if (check_magic(file_name, 0, SPARSE_MAGIC)) {
+			PRINT_PROGRESS("Sparse Image detected, using simg2img");
+			PRINT_PROGRESS("    Please be patient, this can take several minutes...");
+
+			char * args[MAX_EXEC_ARGS];
+			args[0] = file_name;
+			args[1] = (char *)full_path_output_system_img_file.c_str();
+			args[2] = NULL;
+			res = run_program("simg2img", args);
+
+			if (res != 0) {
+				PRINT_ERROR("could not create '%s' (err=%i)", path_output_system_img_file, res);
+				exit_code = 4;
+			} else
+				PRINT_PROGRESS("finished.");
+		}
+		else {
+			PRINT_PROGRESS("Single '%s' found, moving it to output path", path_output_system_img_file);
+			if ((res = move_file(file_name, full_path_output_system_img_file.c_str()))) {
+				PRINT_ERROR("could not create system.img (err=%i)", res);
+				exit_code = 3;
+			}
 		}
 	}
 	else {
