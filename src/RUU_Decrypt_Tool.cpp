@@ -70,8 +70,8 @@ int create_firmware = 0;
 int create_sd_zip = 0;
 int print_debug_info = 0;
 int wait_for_enter = 0;
-int allow_download = 0;
-int allow_upload = 0;
+int allow_download = 1;
+int allow_upload = 1;
 std::string ruuveal_device;
 int create_log_file = 0;
 
@@ -543,7 +543,12 @@ int main(int argc, char **argv)
 		create_sd_zip = Prompt_User_YN("* Create an sd-card flashable zip [y/N]: ", 'N');
 
 		allow_download = Prompt_User_YN("* Do you wish to check for new keyfiles [Y/n]: ", 'Y');
-		allow_upload   = Prompt_User_YN("* If a new keyfile is generated, do you wish to upload it [Y/n]: ", 'Y');
+		if (allow_download)
+			allow_upload = Prompt_User_YN("* If a new keyfile is generated, do you wish to upload it [Y/n]: ", 'Y');
+		else {
+			printf("* Keyfile upload is disabled when download is set to No\n");
+			allow_upload = 0;
+		}
 
 		if (Prompt_User_YN("* Enable debugging options [y/N]: ", 'N')) {
 			print_debug_info = Prompt_User_YN("     * Print Debug Info [y/N]: ", 'N');
