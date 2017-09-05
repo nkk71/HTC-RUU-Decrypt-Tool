@@ -37,6 +37,6 @@
 #define TMP_DECRYPTED_SYSIMGS   "decrypted_system"
 
 
-#define VERSION_STRING "3.6.0 RC1"
+#define VERSION_STRING "3.6.0 RC2"
 
 #endif // _RUU_DECRYPT_TOOL_H
