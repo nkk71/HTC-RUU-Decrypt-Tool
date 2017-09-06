@@ -602,8 +602,16 @@ int main(int argc, char **argv)
 	signal(SIGTSTP, signal_Handler);     // handle CTRL+Z  //  20  /* Keyboard stop (POSIX).  */
 
 
-	if (allow_download)
-		TIME_OPERATION( "Download_Keyfiles", Download_Keyfiles(full_path_to_keys.c_str()); );
+	if (allow_download) {
+		TIME_OPERATION( "Download_Keyfiles", exit_code = Download_Keyfiles(full_path_to_keys.c_str()); );
+		if (exit_code != 0) {
+			if (allow_upload) {
+				PRINT_INFO("Disabling keyfile upload due to failed download.");
+				allow_upload = 0;
+			}
+			exit_code = 0;
+		}
+	}
 
 	std::string path_android_info_file;
 	android_info info;

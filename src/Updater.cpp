@@ -77,9 +77,13 @@ int Sync_Keyfiles(const char *path_keyfiles)
 
 	PRINT_INFO("");
 
-	// Now upload anything not already on the server
-	PRINT_PROGRESS("2) Uploading keyfiles...");
-	exit_code |= run_program("keyfile_updater", "--upload-new", NULL);
+	if (exit_code == 0) {
+		// Now upload anything not already on the server
+		PRINT_PROGRESS("2) Uploading keyfiles...");
+		exit_code = run_program("keyfile_updater", "--upload-new", NULL);
+	}
+	else
+		PRINT_INFO("Disabling keyfile upload due to failed download.");
 
 	change_dir(path_base);
 
