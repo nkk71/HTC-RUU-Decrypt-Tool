@@ -239,9 +239,9 @@ int upload_keyfile(CURL *curl, const char *path_keyfile)
 	curl_easy_setopt(curl, CURLOPT_URL, ftp_file);
 
 	// check if file exists but don't print anything to stdout
-	// (by checking correct keyfile size, if it's not correct size overwrite)
 	curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
 	curl_easy_setopt(curl, CURLOPT_HEADER, 0L);
+	curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
 	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, throw_away);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, throw_away);
 
@@ -252,19 +252,24 @@ int upload_keyfile(CURL *curl, const char *path_keyfile)
 	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, NULL);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, NULL);
 
-	if (res == CURLE_OK) {
-		double filesize = 0.0;
-		res = curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &filesize);
-		//printf("size=%0.0f\n", filesize);
-		if (filesize == KEYFILE_SIZE) {
-			if (verbose)
-				printf("File '%s' already exists, not uploading\n", filename);
-			else if (!print_debug_info) {
-				PROGRESS_INCR;
+	if (res == CURLE_OK || res == CURLE_FTP_COULDNT_RETR_FILE) {
+		if (res == CURLE_OK) {
+			// Keyfile exists double check size
+			double filesize = 0.0;
+			curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &filesize);
+			//printf("res=%d size=%0.0f\n", res, filesize);
+
+			if (filesize < 0 || filesize == KEYFILE_SIZE) {
+				if (verbose)
+					printf("File '%s' already exists, not uploading\n", filename);
+				else if (!print_debug_info) {
+					PROGRESS_INCR;
+				}
+				exit_code = 1;
 			}
-			exit_code = 1;
 		}
-		else {
+
+		if (exit_code == 0) {
 			PROGRESS_RESET;
 			printf("Uploading '%s'...", filename);
 			fflush(stdout);
@@ -385,14 +390,14 @@ int upload_files(const char *path_keyfile)
 
 	if (ret == 0) {
 		if (count > 0)
-			printf("Uploaded %d new keyfiles.\n", count);
+			printf("Uploaded %d new keyfile(s).\n", count);
 		return 0;
 	}
 	else {
 		if (count == 0)
 			printf("Transfer error!\n");
 		else
-			printf("Uploaded %d new keyfiles, but ended in error!\n", count);
+			printf("Uploaded %d new keyfile(s), but ended in error!\n", count);
 		return -1;
 	}
 }
