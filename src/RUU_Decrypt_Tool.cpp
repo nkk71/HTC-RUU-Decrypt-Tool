@@ -217,9 +217,8 @@ void Print_Usage(std::string ProgramName)
 	PRINT_INFO("                        and upload only if a new keyfile is generated");
 	PRINT_INFO("");
 	PRINT_INFO("   Logging:");
-	PRINT_INFO("      -L, --log [filename]   log all output to a txt file");
-	PRINT_INFO("                             'filename' is optional, the default would be:");
-	PRINT_INFO("                             RUU_Decrypt_LOG-{MID}_{MAINVER}.txt in the OUT folder");
+	PRINT_INFO("      -L, --log   log all output to a txt file named");
+	PRINT_INFO("                  'RUU_Decrypt_LOG-{MID}_{MAINVER}.txt' in the OUT folder");
 	PRINT_INFO("");
 	PRINT_INFO("   Debugging Options (not usually needed):");
 	PRINT_INFO("      -k, --keepall          keep all intermediary files");
@@ -247,7 +246,7 @@ int Parse_CommandLine(int argc, char **argv, std::string &path_ruuname, std::str
 		{ "sync-keyfiles", no_argument, NULL, 'S' },  // in the future, so only the long options should be used !
 
 		// Logging
-		{ "log", optional_argument, NULL, 'L' },
+		{ "log", no_argument, NULL, 'L' },
 
 		// Debugging Options
 		{ "keepall",     no_argument, NULL, 'k' },
@@ -297,8 +296,6 @@ int Parse_CommandLine(int argc, char **argv, std::string &path_ruuname, std::str
 			case 'L':
 				opt_count++;
 				create_log_file = 2;
-				//if (optarg)
-				//	log_file_name = optarg;
 				break;
 
 			case 'k':
