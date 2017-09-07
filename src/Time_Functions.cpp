@@ -22,6 +22,10 @@
 #include <stdio.h>
 #include <time.h>
 
+#if defined(__ANDROID__)
+#include <stdlib.h>
+#endif
+
 #include <string>
 #include <ctime>
 
